@@ -4,6 +4,13 @@ struct Player
 	char ch;
 } ;
 
+struct Bullet
+{
+    int line, col;
+	char ch;
+};
+
+
 struct Enemy
 {
     int line, col;
