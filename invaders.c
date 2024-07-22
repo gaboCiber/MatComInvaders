@@ -8,19 +8,93 @@
 const int TOTALBULLET = 10;
 struct Player player;
 struct Bullet bulletArr[10];
+int enemyMovRightLeft[] = {-1, 0 , 1};
+int enemyMoveUpDown[] = {0 , 1};
 
-
-void SetScreen()
+int getRamdomNumberInterval(int min, int max)
 {
-    keypad(stdscr, TRUE);
-    curs_set(0);
+    return min + rand() % (max + 1 - min);
+}
 
-    move(0,(COLS/2)-9);
-    addstr("--MatCOM INVADERS--");
-    move (0,1);
-    addstr("SCORE: ");
+void getRandomPos(struct Enemy *en)
+{
+    int random = rand();
+    en->col += *(en->leftRight + (rand() % en->leftRightCount));
+    en->line += *(en->upDown + (rand() % en->upDownCount));
+}
+
+void createEnemy(void *arg)
+{
+    struct Enemy enemy;
+    enemy.line = 3;
+    enemy.col = getRamdomNumberInterval(5, COLS-5);
+    enemy.ch = '#';   
+    enemy.leftRight = &enemyMovRightLeft;
+    enemy.leftRightCount = 3;  
+    enemy.upDown = &enemyMoveUpDown;
+    enemy.upDownCount = 2;
+
+    move(enemy.line, enemy.col);
+    addch(enemy.ch);
+
+    refresh();
+
+    bool insideScreen = 1;
+
+    while (insideScreen)
+    {
+        move(enemy.line, enemy.col);
+        addch(' ');
+        
+        getRandomPos(&enemy);
+
+        move(enemy.line, enemy.col);
+        addch(enemy.ch);
+
+        insideScreen = enemy.line > 0 && enemy.line < LINES && enemy.col > 0 && enemy.col < COLS;
+        refresh();
+        sleep(1);
+    }
+
+    pthread_exit(NULL);
+}
+
+void createMotherShip(void *arg)
+{   
+    move(0,0);
+    addch('\\');
+    
+    move(1,1);
+    addch('\\');
+
+    int col = 2;
+    while (col < COLS - 1)
+    {
+        move(1,col);
+        addch('_');
+        col++;
+    }
+    move(0,COLS-1);
+    addch('/');
+
+    move(1,COLS-2);
+    addch('/');
     
     refresh();
+
+    while (true)
+    {
+        sleep(getRamdomNumberInterval(1,10));
+        pthread_t enemyThread;       
+        int enemy = pthread_create(&enemyThread, NULL, createEnemy, NULL);
+        if(enemy != 0)
+        {
+            perror("Error al crear el hilo player");
+            return 1;
+        }
+    }
+    
+
 }
 
 void createBullet(void *arg)
@@ -48,8 +122,7 @@ void createBullet(void *arg)
 }
 
 void createPlayerThread(void *arg)
-{
-    
+{    
     player.line = LINES-1;
     player.col = COLS/2;
     player.ch = '^';
@@ -92,10 +165,21 @@ void createPlayerThread(void *arg)
 
 }
 
+
 int main() {
-    initscr(); // Inicializa ncurses
+    srand(time(0));
     
-    SetScreen();
+    initscr(); // Inicializa ncurses
+    keypad(stdscr, TRUE);
+    curs_set(0);
+
+    /*pthread_t mothership;
+    int ship = pthread_create(&mothership, NULL, createMotherShip, NULL);
+    if(ship != 0)
+    {
+        perror("Error al crear el hilo player");
+        return 1;
+    }*/
     
     pthread_t playerThread;
     int player = pthread_create(&playerThread, NULL, createPlayerThread, NULL);
