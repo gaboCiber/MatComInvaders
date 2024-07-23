@@ -19,4 +19,5 @@ struct Enemy
     int* leftRight;
     int upDownCount;
     int leftRightCount; 
+    int indexAtEnemyList;
 } ;
