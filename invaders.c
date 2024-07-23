@@ -4,11 +4,16 @@
 #include <time.h>
 #include <stdlib.h>
 #include "invaderstruct.h"
-#include "enemyList.c"
+#include "stdbool.h"
 
 struct Player player;
 int COLUMNS, ROWS;
 pthread_mutex_t mutex;
+
+const int TOP=10;
+struct Enemy *enemyList[10];
+bool ocupied[10];
+int count = 0;
 
 int getRamdomNumberInterval(int min, int max);
 void getRandomPos(struct Enemy *en);
@@ -18,6 +23,10 @@ void *createMotherShip(void *arg);
 void *createBullet(void *arg);
 void *createPlayerThread(void *arg);
 
+int EnemyListInsert(struct Enemy *enemy);
+void EnemyListRemove(int index);
+bool EnemyListIsOneLeft();
+int EnemyListCheckPositions(int line, int col);
 
 int main() 
 {
@@ -59,6 +68,7 @@ int main()
     return 0;
 }
 
+// Player
 void *createPlayerThread(void *arg)
 {    
     player.line = ROWS-1;
@@ -113,6 +123,7 @@ void *createBullet(void *arg)
         if(killEnemy >= 0)
         {
             EnemyListRemove(killEnemy);
+            mvaddch(bullet.line, bullet.col,' ');
             break;
         }
 
@@ -128,6 +139,8 @@ void *createBullet(void *arg)
     
     pthread_exit(NULL);
 }
+
+// MotherShip
 
 void SetMotherShip()
 {
@@ -166,6 +179,8 @@ void *createMotherShip(void *arg)
 
 }
 
+
+// Enemies
 void *createEnemy(void *arg)
 {
     if(EnemyListIsOneLeft())
@@ -229,3 +244,49 @@ void getRandomPos(struct Enemy *en)
     en->line += *(en->upDown + (rand() % en->upDownCount));
 }
 
+
+// EnemyList
+int EnemyListInsert(struct Enemy *enemy)
+{
+    int i = 0;
+    for (i = 0; i < 10; i++)
+    {
+        if(!ocupied[i])
+        {
+            enemyList[i] = enemy;
+            ocupied[i]=true;
+            count++;
+            return i;
+        }
+    }
+
+    return -1;
+    
+}
+
+void EnemyListRemove(int index)
+{
+    if(index >= 0 && index < count)
+    {
+        enemyList[index]->indexAtEnemyList = -1;
+        ocupied[index] = false;
+        count--;   
+    }
+}
+
+bool EnemyListIsOneLeft()
+{
+    return count < TOP;
+}
+
+int EnemyListCheckPositions(int line, int col)
+{
+    for (int i = 0; i < count; i++)
+    {
+        if( enemyList[i]->line == line && enemyList[i]->col == col)
+            return i;
+    }
+
+    return -1;
+    
+}
