@@ -166,14 +166,16 @@ void *createMotherShip(void *arg)
 {   
     while (true)
     {
-        sleep(getRamdomNumberInterval(1,10));
         pthread_t enemyThread;       
-        int enemy = pthread_create(&enemyThread, NULL, createEnemy, NULL);
-        if(enemy != 0)
+        int en = pthread_create(&enemyThread, NULL, createEnemy, NULL);
+        if(en != 0)
         {
             perror("Error al crear el hilo player");
             break;
         }
+
+        sleep(getRamdomNumberInterval(1,10));
+        
     }
     
 
@@ -185,39 +187,68 @@ void *createEnemy(void *arg)
 {
     if(EnemyListIsOneLeft())
     {
+        // Construction
         struct Enemy enemy;
         enemy.line = 3;
         enemy.col = getRamdomNumberInterval(5, COLUMNS-5);
-        enemy.ch = '#';   
-        enemy.leftRight =  (int[3]) {-1, 0 , 1};
-        enemy.leftRightCount = 3;  
-        enemy.upDown = (int[2]) {0 , 1};
-        enemy.upDownCount = 2;
         enemy.indexAtEnemyList = EnemyListInsert(&enemy);
-
+        
+        switch (getRamdomNumberInterval(0,2))
+        {
+        case 0:
+            enemy.ch = '#';   
+            enemy.leftRight =  (int[3]) {-1, 0 , 1};
+            enemy.leftRightCount = 3;  
+            enemy.upDown = (int[2]) {0 , 1};
+            enemy.upDownCount = 2;
+            break;
+        case 1:
+            enemy.ch = '&';   
+            enemy.leftRight =  (int[1]) {0};
+            enemy.leftRightCount = 1;  
+            enemy.upDown = (int[1]) {1};
+            enemy.upDownCount = 1;
+            break;
+        case 2:
+            enemy.ch = '$';   
+            enemy.leftRight =  (int[2]) {-2,2};
+            enemy.leftRightCount = 2;  
+            enemy.upDown = (int[1]) {1};
+            enemy.upDownCount = 1;
+            break;
+        default:
+            break;
+        }
+        
+        // On battle
         mvaddch(enemy.line, enemy.col,enemy.ch);
-
+    
         pthread_mutex_lock(&mutex);
         refresh();
         pthread_mutex_unlock(&mutex);
 
         bool insideScreen = 1;
 
-        while (insideScreen)
+        while (true)
         {
             mvaddch(enemy.line, enemy.col,' ');
             
             getRandomPos(&enemy);
             
             mvaddch(enemy.line, enemy.col,enemy.ch);
-
+           
             if(enemy.indexAtEnemyList == -1)
             {
                 mvaddch(enemy.line, enemy.col,' ');
                 break;
-            }
+            }  
 
-            insideScreen = enemy.line > 0 && enemy.line < ROWS && enemy.col > 0 && enemy.col < COLUMNS;
+            if(!(enemy.line > 0 && enemy.line < ROWS - 1 && enemy.col > 0 && enemy.col < COLUMNS - 1))
+            {
+                EnemyListRemove(enemy.indexAtEnemyList);
+                mvaddch(enemy.line, enemy.col,' ');
+                break;
+            }     
             
             pthread_mutex_lock(&mutex);
             refresh();
@@ -225,11 +256,12 @@ void *createEnemy(void *arg)
             
             usleep(500000);
         }
+
+    
     }
-
-   
-
+    
     pthread_exit(NULL);
+
 }
 
 int getRamdomNumberInterval(int min, int max)
