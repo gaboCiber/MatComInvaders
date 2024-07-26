@@ -20,4 +20,5 @@ struct Enemy
     int upDownCount;
     int leftRightCount; 
     int indexAtEnemyList;
+    int constructionTime;
 } ;
