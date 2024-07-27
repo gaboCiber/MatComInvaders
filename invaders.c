@@ -6,27 +6,44 @@
 #include "invaderstruct.h"
 #include "stdbool.h"
 
-struct Player player;
+// General
 int COLUMNS, ROWS;
 pthread_mutex_t mutex;
 
+int getRamdomNumberInterval(int min, int max);
+void getRandomPos(struct Enemy *en);
+
+// Player 
+struct Player player;
+void *createBullet(void *arg);
+void *createPlayerThread(void *arg);
+
+// MotherShip and Enemies 
+void setMotherShip();
+void *createMotherShip(void *arg);
+void desingEnemy(struct EnemyDesing* en);
+void *createEnemy(void *arg);
+
+
+// EnemyList 
 const int TOP=10;
 struct Enemy *enemyList[10];
 bool ocupied[10];
 int count = 0;
-
-int getRamdomNumberInterval(int min, int max);
-void getRandomPos(struct Enemy *en);
-void *createEnemy(void *arg);
-void SetMotherShip();
-void *createMotherShip(void *arg);
-void *createBullet(void *arg);
-void *createPlayerThread(void *arg);
-
 int EnemyListInsert(struct Enemy *enemy);
 void EnemyListRemove(int index);
 bool EnemyListIsOneLeft();
 int EnemyListCheckPositions(int line, int col);
+
+// Hangar 
+struct HangarNode hangarRoot;
+struct EnemyDesing *enemyShip;
+int enemiesInConstruction = 0;
+bool enemyReadyToBattle = false;
+void HangarInsert(struct HangarNode *newEnemy);
+struct EnemyDesing *HangarBuild();
+
+// ------------------------------------------------------------------------------------//
 
 int main() 
 {
@@ -42,7 +59,7 @@ int main()
     keypad(stdscr, TRUE);
     curs_set(0);
 
-    SetMotherShip();
+    setMotherShip();
     pthread_t mothership;
     int ship = pthread_create(&mothership, NULL, createMotherShip, NULL);
     if(ship != 0)
@@ -67,6 +84,8 @@ int main()
     pthread_mutex_destroy(&mutex);
     return 0;
 }
+
+// ------------------------------------------------------------------------------------//
 
 // Player
 void *createPlayerThread(void *arg)
@@ -140,9 +159,9 @@ void *createBullet(void *arg)
     pthread_exit(NULL);
 }
 
-// MotherShip
+// MotherShip and Enemies
 
-void SetMotherShip()
+void setMotherShip()
 {
     mvaddch(0,0,'\\');
     
@@ -166,48 +185,82 @@ void *createMotherShip(void *arg)
 {   
     while (true)
     {
-        pthread_t enemyThread;       
-        int en = pthread_create(&enemyThread, NULL, createEnemy, NULL);
-        if(en != 0)
+        if(EnemyListIsOneLeft())
         {
-            perror("Error al crear el hilo player");
-            break;
-        }
+            struct EnemyDesing newEnemy;
+            desingEnemy(&newEnemy);
 
-        sleep(getRamdomNumberInterval(1,10));
-        
+            struct HangarNode newShip;
+            newShip.ship = &newEnemy;
+            HangarInsert(&newShip);
+            enemyShip = HangarBuild();
+            
+            if(enemyReadyToBattle)
+            {
+                pthread_t enemyThread;       
+                int en = pthread_create(&enemyThread, NULL, createEnemy, (void *) (intptr_t) enemyShip->shipModel);
+                if(en != 0)
+                {
+                    perror("Error al crear el hilo player");
+                    break;
+                }
+
+                enemyReadyToBattle = false;
+            }
+
+            usleep(3000000);
+           
+        }
+              
     }
     
 
 }
 
-
-// Enemies
-void *createEnemy(void *arg)
-{
-    if(EnemyListIsOneLeft())
+void desingEnemy(struct EnemyDesing* en)
+{ 
+    switch (getRamdomNumberInterval(0,2))
     {
-        // Construction
-        struct Enemy enemy;
-        enemy.line = 3;
-        enemy.col = getRamdomNumberInterval(5, COLUMNS-5);
-        enemy.indexAtEnemyList = EnemyListInsert(&enemy);
-        
-        switch (getRamdomNumberInterval(0,2))
-        {
         case 0:
-            enemy.ch = '#';   
-            enemy.leftRight =  (int[3]) {-1, 0 , 1};
-            enemy.leftRightCount = 3;  
-            enemy.upDown = (int[2]) {0 , 1};
-            enemy.upDownCount = 2;
+            en->shipModel = 0;
+            en->buildTime = 1;
             break;
         case 1:
+            en->shipModel = 1;
+            en->buildTime = 2;
+            break;
+        case 2:
+            en->shipModel = 2;
+            en->buildTime = 4;
+            break;
+        default:
+            break;
+    }
+}
+
+void *createEnemy(void *arg)
+{
+    // Construction
+    struct Enemy enemy;
+    enemy.line = 3;
+    enemy.col = getRamdomNumberInterval(5, COLUMNS-5);
+    enemy.indexAtEnemyList = EnemyListInsert(&enemy);
+    
+    switch ( (int) (intptr_t) arg )
+    {
+        case 0:
             enemy.ch = '&';   
             enemy.leftRight =  (int[1]) {0};
             enemy.leftRightCount = 1;  
             enemy.upDown = (int[1]) {1};
             enemy.upDownCount = 1;
+            break;
+        case 1:
+            enemy.ch = '#';   
+            enemy.leftRight =  (int[3]) {-1, 0 , 1};
+            enemy.leftRightCount = 3;  
+            enemy.upDown = (int[2]) {0 , 1};
+            enemy.upDownCount = 2;
             break;
         case 2:
             enemy.ch = '$';   
@@ -218,64 +271,96 @@ void *createEnemy(void *arg)
             break;
         default:
             break;
-        }
-        
-        // On battle
-        mvaddch(enemy.line, enemy.col,enemy.ch);
+    }
     
+    // On battle
+    mvaddch(enemy.line, enemy.col,enemy.ch);
+
+    pthread_mutex_lock(&mutex);
+    refresh();
+    pthread_mutex_unlock(&mutex);
+
+    bool insideScreen = 1;
+
+    while (true)
+    {
+        mvaddch(enemy.line, enemy.col,' ');
+        
+        getRandomPos(&enemy);
+        
+        mvaddch(enemy.line, enemy.col,enemy.ch);
+        
+        if(enemy.indexAtEnemyList == -1)
+        {
+            mvaddch(enemy.line, enemy.col,' ');
+            break;
+        }  
+
+        if(!(enemy.line > 0 && enemy.line < ROWS - 1 && enemy.col > 0 && enemy.col < COLUMNS - 1))
+        {
+            EnemyListRemove(enemy.indexAtEnemyList);
+            mvaddch(enemy.line, enemy.col,' ');
+            break;
+        }     
+        
         pthread_mutex_lock(&mutex);
         refresh();
         pthread_mutex_unlock(&mutex);
-
-        bool insideScreen = 1;
-
-        while (true)
-        {
-            mvaddch(enemy.line, enemy.col,' ');
-            
-            getRandomPos(&enemy);
-            
-            mvaddch(enemy.line, enemy.col,enemy.ch);
-           
-            if(enemy.indexAtEnemyList == -1)
-            {
-                mvaddch(enemy.line, enemy.col,' ');
-                break;
-            }  
-
-            if(!(enemy.line > 0 && enemy.line < ROWS - 1 && enemy.col > 0 && enemy.col < COLUMNS - 1))
-            {
-                EnemyListRemove(enemy.indexAtEnemyList);
-                mvaddch(enemy.line, enemy.col,' ');
-                break;
-            }     
-            
-            pthread_mutex_lock(&mutex);
-            refresh();
-            pthread_mutex_unlock(&mutex);
-            
-            usleep(500000);
-        }
-
-    
+        
+        usleep(500000);
     }
-    
+
     pthread_exit(NULL);
 
 }
 
-int getRamdomNumberInterval(int min, int max)
+// Hangar
+void HangarInsert(struct HangarNode *newEnemy)
 {
-    return min + rand() % (max + 1 - min);
+    struct HangarNode *iterator = &hangarRoot;
+    int count = 0;
+
+    while (count < enemiesInConstruction)
+    {
+        if(newEnemy->ship->buildTime < iterator->next->ship->buildTime)
+        {
+            newEnemy->next = iterator->next;
+            break;
+        }
+
+        iterator = iterator->next;
+        count++;
+    }
+
+    iterator->next = newEnemy;
+    enemiesInConstruction++;
 }
 
-void getRandomPos(struct Enemy *en)
+struct EnemyDesing *HangarBuild()
 {
-    int random = rand();
-    en->col += *(en->leftRight + (rand() % en->leftRightCount));
-    en->line += *(en->upDown + (rand() % en->upDownCount));
-}
+    struct EnemyDesing *enemyToReturn;
+    enemyReadyToBattle = false;
+    
+    if(enemiesInConstruction > 0)
+    {
 
+        if(hangarRoot.next->ship->buildTime <= 1)
+        {
+            enemyToReturn = hangarRoot.next->ship;
+            hangarRoot.next = hangarRoot.next->next;
+            enemiesInConstruction--;
+            enemyReadyToBattle = true;
+        }
+        else
+        {
+            hangarRoot.next->ship->buildTime--;     
+        }
+        
+        
+    }   
+    
+    return enemyToReturn;
+}
 
 // EnemyList
 int EnemyListInsert(struct Enemy *enemy)
@@ -322,3 +407,18 @@ int EnemyListCheckPositions(int line, int col)
     return -1;
     
 }
+
+
+// General
+int getRamdomNumberInterval(int min, int max)
+{
+    return min + rand() % (max + 1 - min);
+}
+
+void getRandomPos(struct Enemy *en)
+{
+    int random = rand();
+    en->col += *(en->leftRight + (rand() % en->leftRightCount));
+    en->line += *(en->upDown + (rand() % en->upDownCount));
+}
+

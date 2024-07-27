@@ -22,3 +22,15 @@ struct Enemy
     int indexAtEnemyList;
     int constructionTime;
 } ;
+
+struct EnemyDesing
+{
+    int shipModel;
+    int buildTime;
+};
+
+struct HangarNode
+{
+    struct EnemyDesing *ship;
+    struct HangarNode *next;
+};
