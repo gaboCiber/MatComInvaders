@@ -225,7 +225,7 @@ void *createMotherShip(void *arg)
                 enemyReadyToBattle = false;
             }
 
-            usleep(3000000);
+            usleep(1000000);
            
         }
               
@@ -475,8 +475,18 @@ bool EnemyListIsOneLeft()
 
 int EnemyListCheckPositions(int line, int col)
 {
+    struct FreeEnemyBlock *iterator = &rootBlock;
+    int count = 0;
     for (int i = 0; i < TOP; i++)
     {
+        if(count < numberOfFreeBlock && i == iterator->next->index)
+        {
+            i += iterator->next->length - 1;
+            iterator = iterator->next;
+            count++;
+            continue;
+        }
+        
         if( enemyList[i]->line == line && enemyList[i]->col == col)
             return i;
     }

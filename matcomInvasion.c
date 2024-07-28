@@ -3,7 +3,7 @@
 #include <unistd.h>
 #include <time.h>
 #include <stdlib.h>
-#include "../invaderstruct.h"
+#include "invaderstruct.h"
 #include "stdbool.h"
 
 // General
@@ -40,6 +40,8 @@ struct HangarNode hangarRoot;
 struct EnemyDesing *enemyShip;
 int enemiesInConstruction = 0;
 bool enemyReadyToBattle = false;
+int leafPriority = 0;
+const int PRIORITY = 2;
 void HangarInsert(struct HangarNode *newEnemy);
 struct EnemyDesing *HangarBuild();
 
@@ -185,13 +187,27 @@ void *createMotherShip(void *arg)
 {   
     while (true)
     {
+        // Without Scheduling
+        /*pthread_t enemyThread;       
+        int en = pthread_create(&enemyThread, NULL, createEnemy, (void *) (intptr_t) (getRamdomNumberInterval(0,2)));
+        if(en != 0)
+        {
+            perror("Error al crear el hilo player");
+            break;
+        } 
+
+        
+        enemyReadyToBattle = false;
+        usleep(1000000);*/
+        
+        // Scheduling
         if(EnemyListIsOneLeft())
         {
-            struct EnemyDesing newEnemy;
-            desingEnemy(&newEnemy);
+            struct EnemyDesing *newEnemy = (struct EnemyDesing *) malloc(sizeof(struct EnemyDesing));
+            desingEnemy(newEnemy);
 
             struct HangarNode newShip;
-            newShip.ship = &newEnemy;
+            newShip.ship = newEnemy;
             HangarInsert(&newShip);
             enemyShip = HangarBuild();
             
@@ -208,8 +224,7 @@ void *createMotherShip(void *arg)
                 enemyReadyToBattle = false;
             }
 
-            usleep(3000000);
-           
+            usleep(1000000);        
         }
               
     }
@@ -227,7 +242,7 @@ void desingEnemy(struct EnemyDesing* en)
             break;
         case 1:
             en->shipModel = 1;
-            en->buildTime = 1;
+            en->buildTime = 2;
             break;
         case 2:
             en->shipModel = 2;
@@ -343,9 +358,26 @@ struct EnemyDesing *HangarBuild()
     
     if(enemiesInConstruction > 0)
     {
-
-        if(hangarRoot.next->ship->buildTime <= 1)
+        if(leafPriority == PRIORITY && enemiesInConstruction > 1)
         {
+            struct HangarNode *iterator = &hangarRoot;
+
+            for(int count = 0; count < enemiesInConstruction - 1; count++)
+            {
+                iterator = iterator->next;
+            }
+
+            iterator->next->ship->buildTime--;
+            struct HangarNode *boost = iterator->next;
+            iterator->next = NULL;
+            enemiesInConstruction--;
+            leafPriority = -1;
+            HangarInsert(boost);
+            
+        }
+        else if(hangarRoot.next->ship->buildTime <= 1)
+        {
+            hangarRoot.next->ship->buildTime = 0;
             enemyToReturn = hangarRoot.next->ship;
             hangarRoot.next = hangarRoot.next->next;
             enemiesInConstruction--;
@@ -359,6 +391,7 @@ struct EnemyDesing *HangarBuild()
         
     }   
     
+    leafPriority++;
     return enemyToReturn;
 }
 

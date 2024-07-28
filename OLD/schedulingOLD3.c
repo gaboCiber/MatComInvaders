@@ -6,14 +6,9 @@
 #include "invaderstruct.h"
 #include "stdbool.h"
 
-struct HangarNodeN
-{
-    int shipModel;
-    int buildTime;
-    struct HangarNodeN *next;
-};
 
-struct HangarNodeN hangarRoot;
+
+struct HangarNode hangarRoot;
 int enemiesInConstruction = 0;
 int leafPriority = 0;
 const int PRIORITY = 2;
@@ -23,15 +18,14 @@ int getRamdomNumberInterval(int min, int max)
     return min + rand() % (max + 1 - min);
 }
 
-
-void HangarInsert(struct HangarNodeN *newEnemy)
+void HangarInsert(struct HangarNode *newEnemy)
 {
-    struct HangarNodeN *iterator = &hangarRoot;
+    struct HangarNode *iterator = &hangarRoot;
     int count = 0;
 
     while (count < enemiesInConstruction)
     {
-        if(newEnemy->buildTime < iterator->next->buildTime)
+        if(newEnemy->ship->buildTime < iterator->next->ship->buildTime)
         {
             newEnemy->next = iterator->next;
             break;
@@ -51,34 +45,31 @@ int HangarBuild()
     {
         if(leafPriority == PRIORITY && enemiesInConstruction > 1)
         {
-            struct HangarNodeN *iterator = &hangarRoot;
+            struct HangarNode *iterator = &hangarRoot;
 
             for(int count = 0; count < enemiesInConstruction - 1; count++)
             {
                 iterator = iterator->next;
             }
 
-            iterator->next->buildTime--;
-            struct HangarNodeN *boost = iterator->next;
+            iterator->next->ship->buildTime--;
+            struct HangarNode *boost = iterator->next;
             iterator->next = NULL;
             enemiesInConstruction--;
             leafPriority = -1;
             HangarInsert(boost);
             
         }
-        
-        if(hangarRoot.next->buildTime <= 1)
+        else if(hangarRoot.next->ship->buildTime <= 1)
         {
-            struct HangarNodeN *builtEnemy = hangarRoot.next;
-            int model = builtEnemy->shipModel;
-            hangarRoot.next = builtEnemy->next;
+            int model = hangarRoot.next->ship->shipModel;
+            hangarRoot.next = hangarRoot.next->next;
             enemiesInConstruction--;
-            free(builtEnemy);
             return model;
         }
         else
         {
-            hangarRoot.next->buildTime--;     
+            hangarRoot.next->ship->buildTime--;     
         }
         
         
@@ -88,7 +79,7 @@ int HangarBuild()
     return -1;
 }
 
-void desingEnemy(struct HangarNodeN* en)
+void desingEnemy(struct EnemyDesing* en)
 {
     
     switch (getRamdomNumberInterval(0,2))
@@ -103,52 +94,31 @@ void desingEnemy(struct HangarNodeN* en)
             break;
         case 2:
             en->shipModel = 2;
-            en->buildTime = 3;
+            en->buildTime = 4;
             break;
         default:
             break;
     }
 }
 
-void destroyUnbuildEnemies()
-{
-    struct HangarNodeN *iterator = hangarRoot.next;
-    struct HangarNodeN *toDestroy;
-    for (int count = 0; count < enemiesInConstruction; count++)
-    {
-        toDestroy = iterator;
-        iterator = iterator->next;
-        free(toDestroy);
-    }
-}
-
 int main(){
     
     srand(time(0));
+    int enemy;
 
-    hangarRoot.buildTime = -1;
-    hangarRoot.shipModel = -1;
-
-    int num0 = 0;
-    int num1 = 0;
-    int num2 = 0;
-
-    for (int i = 0; i < 20; i++)
-    {  
-        struct HangarNodeN *n1 = (struct HangarNodeN*) malloc(sizeof(struct HangarNodeN));
-        desingEnemy(n1);
-        int ship = n1->shipModel;
+    struct EnemyDesing e0;
+    e0.buildTime = -1;
+    e0.shipModel =-1;
+    hangarRoot.ship = &e0;
+         
+    for (int i = 0; i < 10; i++)
+    {
+        struct EnemyDesing *e1 = (struct EnemyDesing*) malloc(sizeof(struct EnemyDesing));
+        desingEnemy(e1);
+        struct HangarNode *n1 = (struct HangarNode*) malloc(sizeof(struct HangarNode));
+        n1->ship = e1;
         HangarInsert(n1);
         int model = HangarBuild();
-        printf("%d \t %d \n" , ship , model);
-
-        num0 += (model == 0) ? 1 : 0;
-        num1 += (model == 1) ? 1 : 0;
-        num2 += (model == 2) ? 1 : 0;
-
+        printf("%d \t %d \n" , n1->ship->shipModel , model);
     }
-
-    printf("\n0: %d \t 1: %d \t 2: %d \n", num0, num1, num2);
-
-    destroyUnbuildEnemies();
 }
