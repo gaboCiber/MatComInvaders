@@ -26,12 +26,12 @@ void *createEnemy(void *arg);
 
 
 // EnemyList 
-struct FreeEnemyBlock rootBlock;
-int numberOfFreeBlock;
 const int TOP=10;
 struct Enemy *enemyList[10];
-void EnemyListInsert(struct Enemy *enemy);
-void EnemyListRemove(struct FreeEnemyBlock *newBlock);
+bool ocupied[10];
+int count = 0;
+int EnemyListInsert(struct Enemy *enemy);
+void EnemyListRemove(int index);
 bool EnemyListIsOneLeft();
 int EnemyListCheckPositions(int line, int col);
 
@@ -59,19 +59,6 @@ int main()
     keypad(stdscr, TRUE);
     curs_set(0);
 
-    // Set Memory For Enemies
-    rootBlock.index = -2;
-    rootBlock.length = -2;
-
-    struct FreeEnemyBlock initial;
-    initial.index = 0;
-    initial.length = TOP;
-
-    rootBlock.next = &initial;
-    numberOfFreeBlock = 1;
-
-    // Create MotherShip and Enemies
-
     setMotherShip();
     pthread_t mothership;
     int ship = pthread_create(&mothership, NULL, createMotherShip, NULL);
@@ -81,7 +68,6 @@ int main()
         return 1;
     }
     
-    // Create Player
     pthread_t playerThread;
     int player = pthread_create(&playerThread, NULL, createPlayerThread, NULL);
     if(player != 0)
@@ -155,10 +141,7 @@ void *createBullet(void *arg)
         int killEnemy = EnemyListCheckPositions(bullet.line, bullet.col);
         if(killEnemy >= 0)
         {
-            struct FreeEnemyBlock free;
-            free.index = killEnemy;
-            free.length = 1;
-            EnemyListRemove(&free);
+            EnemyListRemove(killEnemy);
             mvaddch(bullet.line, bullet.col,' ');
             break;
         }
@@ -261,7 +244,8 @@ void *createEnemy(void *arg)
     struct Enemy enemy;
     enemy.line = 3;
     enemy.col = getRamdomNumberInterval(5, COLUMNS-5);
-
+    enemy.indexAtEnemyList = EnemyListInsert(&enemy);
+    
     switch ( (int) (intptr_t) arg )
     {
         case 0:
@@ -289,8 +273,6 @@ void *createEnemy(void *arg)
             break;
     }
     
-    EnemyListInsert(&enemy);
-
     // On battle
     mvaddch(enemy.line, enemy.col,enemy.ch);
 
@@ -316,10 +298,7 @@ void *createEnemy(void *arg)
 
         if(!(enemy.line > 0 && enemy.line < ROWS - 1 && enemy.col > 0 && enemy.col < COLUMNS - 1))
         {
-            struct FreeEnemyBlock free;
-            free.index = enemy.indexAtEnemyList;
-            free.length = 1;
-            EnemyListRemove(&free);
+            EnemyListRemove(enemy.indexAtEnemyList);
             mvaddch(enemy.line, enemy.col,' ');
             break;
         }     
@@ -384,98 +363,42 @@ struct EnemyDesing *HangarBuild()
 }
 
 // EnemyList
-void EnemyListInsert(struct Enemy *enemy)
+int EnemyListInsert(struct Enemy *enemy)
 {
-    if(numberOfFreeBlock > 0)
+    int i = 0;
+    for (i = 0; i < 10; i++)
     {
-        enemyList[rootBlock.next->index] = enemy;
-        enemy->indexAtEnemyList = rootBlock.next->index;
-
-        if(rootBlock.next->length == 1)
+        if(!ocupied[i])
         {
-            rootBlock.next = (numberOfFreeBlock > 1) ? rootBlock.next->next : NULL;
-            numberOfFreeBlock--;
-        }
-        else
-        {
-            rootBlock.next->index++;
-            rootBlock.next->length--;
+            enemyList[i] = enemy;
+            ocupied[i]=true;
+            count++;
+            return i;
         }
     }
+
+    return -1;
     
 }
 
-void EnemyListRemove(struct FreeEnemyBlock *newBlock)
+void EnemyListRemove(int index)
 {
-    if(newBlock->index >= 0 && newBlock->index < TOP)
+    if(index >= 0 && index < count)
     {
-        enemyList[newBlock->index]->indexAtEnemyList = -1;
-
-        int count = 0;
-        struct FreeEnemyBlock * iterator = &rootBlock;
-        
-        while (true)
-        {
-            bool before = iterator->index + iterator->length == newBlock->index;
-            
-            if(count == numberOfFreeBlock)
-            {
-                if(before)
-                {
-                    iterator->length++;
-                }
-                else
-                {
-                    iterator->next = newBlock; 
-                    numberOfFreeBlock++; 
-                }
-
-                break;
-            }
-            else if(newBlock->index < iterator->next->index)
-            {
-                bool after = newBlock->index + 1 == iterator->next->index;
-
-                if(before && after)
-                {
-                    iterator->length += 1 + iterator->next->length;
-                    iterator->next = iterator->next->next;
-                    numberOfFreeBlock--;
-                }
-                else if(before)
-                {
-                    iterator->length++;
-                }
-                else if (after)
-                {
-                    iterator->next->index--;
-                    iterator->next->length++;
-                }
-                else
-                {
-                    newBlock->next = iterator->next;
-                    iterator->next = newBlock;
-                    numberOfFreeBlock++;
-                } 
-
-                break; 
-            }   
-
-            iterator = iterator->next;
-            count++;        
-        }    
+        enemyList[index]->indexAtEnemyList = -1;
+        ocupied[index] = false;
+        count--;   
     }
-
 }
 
 bool EnemyListIsOneLeft()
 {
-    return numberOfFreeBlock > 0;
+    return count < TOP;
 }
 
 int EnemyListCheckPositions(int line, int col)
 {
-    for (int i = 0; i < TOP; i++)
+    for (int i = 0; i < count; i++)
     {
         if( enemyList[i]->line == line && enemyList[i]->col == col)
             return i;

@@ -20,7 +20,6 @@ struct Enemy
     int upDownCount;
     int leftRightCount; 
     int indexAtEnemyList;
-    int constructionTime;
 } ;
 
 struct EnemyDesing
@@ -33,4 +32,11 @@ struct HangarNode
 {
     struct EnemyDesing *ship;
     struct HangarNode *next;
+};
+
+struct FreeEnemyBlock
+{
+    int index;
+    int length;
+    struct FreeEnemyBlock *next;
 };

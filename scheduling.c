@@ -6,11 +6,17 @@
 #include "invaderstruct.h"
 #include "stdbool.h"
 
+struct HangarNodeP
+{
+    struct EnemyDesing *ship;
+    struct HangarNodeP *next;
+    struct HangarNodeP *previous;
+};
 
-struct HangarNode hangarRoot;
-struct HangarNode *hangarPreLeaf;
+struct HangarNodeP hangarRoot;
+struct HangarNodeP *hangarLeaf;
 int enemiesInConstruction = 0;
-int priority = 0;
+int leafPriority = 0;
 bool enemyReadyToBattle = false;
 
 int getRamdomNumberInterval(int min, int max)
@@ -18,36 +24,31 @@ int getRamdomNumberInterval(int min, int max)
     return min + rand() % (max + 1 - min);
 }
 
-void HangarInsert(struct HangarNode *newEnemy)
+void HangarInsert(struct HangarNodeP *newEnemy)
 {
-    struct HangarNode *iterator = &hangarRoot;
+    struct HangarNodeP *iterator = &hangarRoot;
     int count = 0;
 
-    while (true)
+    while (count < enemiesInConstruction)
     {
-        if(count == enemiesInConstruction)
-        {
-            hangarPreLeaf = iterator;
-            iterator->next = newEnemy;
-            break;
-        }
-
         if(newEnemy->ship->buildTime < iterator->next->ship->buildTime)
         {
-            if(iterator == hangarPreLeaf)
-            {
-                hangarPreLeaf = newEnemy;
-            }
-
-            iterator->next = newEnemy;
+            iterator->next->previous = newEnemy;
             newEnemy->next = iterator->next;
-            break;
+            break; 
         }
 
         iterator = iterator->next;
         count++;
     }
 
+    if(count == enemiesInConstruction)
+    {
+        hangarLeaf = newEnemy;
+    }
+
+    newEnemy->previous = iterator;
+    iterator->next = newEnemy;
     enemiesInConstruction++;
 }
 
@@ -58,21 +59,35 @@ struct EnemyDesing *HangarBuild()
     
     if(enemiesInConstruction > 0)
     {
-        if(hangarRoot.next->ship->buildTime <= 1)
+        if(leafPriority == 3 && enemiesInConstruction > 1)
+        {
+            hangarLeaf->ship->buildTime--;
+            struct HangarNodeP * leaf = hangarLeaf;
+            hangarLeaf = leaf->previous;
+            hangarLeaf->next = NULL;
+            leaf->previous = NULL;
+            enemiesInConstruction--;
+            HangarInsert(hangarLeaf);
+            leafPriority = -1;
+        }
+        else if(hangarRoot.next->ship->buildTime <= 1)
         {
             enemyToReturn = hangarRoot.next->ship;
-            hangarRoot.next = hangarRoot.next->next;
-            enemiesInConstruction--;
+           
+            if(enemiesInConstruction == 1)
+            {
+                hangarRoot.next = hangarRoot.previous;
+                hangarLeaf = &hangarRoot;
+            }
+            else
+            {
+                hangarRoot.next->next->previous = &hangarRoot;
+                hangarRoot.next = hangarRoot.next->next;
+            }
+
+            enemiesInConstruction--; 
             enemyReadyToBattle = true;
-        }
-        else if(priority == 2)
-        {
-            priority = -1;
-            struct HangarNode boost;
-            boost.ship->shipModel = hangarPreLeaf->next->ship->shipModel;
-            boost.ship->buildTime = hangarPreLeaf->next->ship->buildTime - 1;
-            hangarPreLeaf->next = boost.next;
-            HangarInsert(&boost);
+
         }
         else
         {
@@ -82,7 +97,7 @@ struct EnemyDesing *HangarBuild()
         
     }   
     
-    priority++;
+    leafPriority++;
     return enemyToReturn;
 }
 
@@ -117,38 +132,39 @@ int main(){
     e0.buildTime = -1;
     e0.shipModel =-1;
     hangarRoot.ship = &e0;
+    hangarLeaf = &hangarRoot;
     
     struct EnemyDesing e1;
     desingEnemy(&e1);
-    struct HangarNode n1;
+    struct HangarNodeP n1;
     n1.ship = &e1;
     HangarInsert(&n1);
     enemy = HangarBuild();
     
     struct EnemyDesing e2;
     desingEnemy(&e2);
-    struct HangarNode n2;
+    struct HangarNodeP n2;
     n2.ship = &e2;
     HangarInsert(&n2);
     enemy = HangarBuild();
 
     struct EnemyDesing e3;
     desingEnemy(&e3);
-    struct HangarNode n3;
+    struct HangarNodeP n3;
     n3.ship = &e3;
     HangarInsert(&n3);
     enemy = HangarBuild();
 
     struct EnemyDesing e4;
     desingEnemy(&e4);
-    struct HangarNode n4;
+    struct HangarNodeP n4;
     n4.ship = &e4;
     HangarInsert(&n4);
     enemy = HangarBuild();
 
     struct EnemyDesing e5;
     desingEnemy(&e5);
-    struct HangarNode n5;
+    struct HangarNodeP n5;
     n5.ship = &e5;
     HangarInsert(&n5);
     enemy = HangarBuild();
