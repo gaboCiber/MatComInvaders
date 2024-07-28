@@ -22,18 +22,12 @@ struct Enemy
     int indexAtEnemyList;
 } ;
 
-struct EnemyDesing
+struct HangarNode
 {
     int shipModel;
     int buildTime;
-};
-
-struct HangarNode
-{
-    struct EnemyDesing *ship;
     struct HangarNode *next;
 };
-
 struct FreeEnemyBlock
 {
     int index;

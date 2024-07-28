@@ -6,14 +6,14 @@
 #include "invaderstruct.h"
 #include "stdbool.h"
 
-struct HangarNodeN
+struct HangarNode
 {
     int shipModel;
     int buildTime;
-    struct HangarNodeN *next;
+    struct HangarNode *next;
 };
 
-struct HangarNodeN hangarRoot;
+struct HangarNode hangarRoot;
 int enemiesInConstruction = 0;
 int leafPriority = 0;
 const int PRIORITY = 2;
@@ -24,9 +24,9 @@ int getRamdomNumberInterval(int min, int max)
 }
 
 
-void HangarInsert(struct HangarNodeN *newEnemy)
+void HangarInsert(struct HangarNode *newEnemy)
 {
-    struct HangarNodeN *iterator = &hangarRoot;
+    struct HangarNode *iterator = &hangarRoot;
     int count = 0;
 
     while (count < enemiesInConstruction)
@@ -51,7 +51,7 @@ int HangarBuild()
     {
         if(leafPriority == PRIORITY && enemiesInConstruction > 1)
         {
-            struct HangarNodeN *iterator = &hangarRoot;
+            struct HangarNode *iterator = &hangarRoot;
 
             for(int count = 0; count < enemiesInConstruction - 1; count++)
             {
@@ -59,7 +59,7 @@ int HangarBuild()
             }
 
             iterator->next->buildTime--;
-            struct HangarNodeN *boost = iterator->next;
+            struct HangarNode *boost = iterator->next;
             iterator->next = NULL;
             enemiesInConstruction--;
             leafPriority = -1;
@@ -69,7 +69,7 @@ int HangarBuild()
         
         if(hangarRoot.next->buildTime <= 1)
         {
-            struct HangarNodeN *builtEnemy = hangarRoot.next;
+            struct HangarNode *builtEnemy = hangarRoot.next;
             int model = builtEnemy->shipModel;
             hangarRoot.next = builtEnemy->next;
             enemiesInConstruction--;
@@ -88,7 +88,7 @@ int HangarBuild()
     return -1;
 }
 
-void desingEnemy(struct HangarNodeN* en)
+void desingEnemy(struct HangarNode* en)
 {
     
     switch (getRamdomNumberInterval(0,2))
@@ -112,8 +112,8 @@ void desingEnemy(struct HangarNodeN* en)
 
 void destroyUnbuildEnemies()
 {
-    struct HangarNodeN *iterator = hangarRoot.next;
-    struct HangarNodeN *toDestroy;
+    struct HangarNode *iterator = hangarRoot.next;
+    struct HangarNode *toDestroy;
     for (int count = 0; count < enemiesInConstruction; count++)
     {
         toDestroy = iterator;
@@ -135,10 +135,10 @@ int main(){
 
     for (int i = 0; i < 20; i++)
     {  
-        struct HangarNodeN *n1 = (struct HangarNodeN*) malloc(sizeof(struct HangarNodeN));
-        desingEnemy(n1);
-        int ship = n1->shipModel;
-        HangarInsert(n1);
+        struct HangarNode *newEnemy = (struct HangarNode*) malloc(sizeof(struct HangarNode));
+        desingEnemy(newEnemy);
+        int ship = newEnemy->shipModel;
+        HangarInsert(newEnemy);
         int model = HangarBuild();
         printf("%d \t %d \n" , ship , model);
 

@@ -21,7 +21,6 @@ void *createPlayerThread(void *arg);
 // MotherShip and Enemies 
 void setMotherShip();
 void *createMotherShip(void *arg);
-void desingEnemy(struct EnemyDesing* en);
 void *createEnemy(void *arg);
 
 
@@ -37,13 +36,13 @@ int EnemyListCheckPositions(int line, int col);
 
 // Hangar 
 struct HangarNode hangarRoot;
-struct EnemyDesing *enemyShip;
 int enemiesInConstruction = 0;
-bool enemyReadyToBattle = false;
 int leafPriority = 0;
 const int PRIORITY = 2;
 void HangarInsert(struct HangarNode *newEnemy);
-struct EnemyDesing *HangarBuild();
+int HangarBuild();
+void desingEnemy(struct HangarNode* en);
+void destroyUnbuildEnemies();
 
 // ------------------------------------------------------------------------------------//
 
@@ -203,25 +202,20 @@ void *createMotherShip(void *arg)
         // Scheduling
         if(EnemyListIsOneLeft())
         {
-            struct EnemyDesing *newEnemy = (struct EnemyDesing *) malloc(sizeof(struct EnemyDesing));
+            struct HangarNode *newEnemy = (struct HangarNode*) malloc(sizeof(struct HangarNode));
             desingEnemy(newEnemy);
-
-            struct HangarNode newShip;
-            newShip.ship = newEnemy;
-            HangarInsert(&newShip);
-            enemyShip = HangarBuild();
+            HangarInsert(newEnemy);
+            int model = HangarBuild();
             
-            if(enemyReadyToBattle)
+            if(model >= 0)
             {
                 pthread_t enemyThread;       
-                int en = pthread_create(&enemyThread, NULL, createEnemy, (void *) (intptr_t) enemyShip->shipModel);
+                int en = pthread_create(&enemyThread, NULL, createEnemy, (void *) (intptr_t) model);
                 if(en != 0)
                 {
                     perror("Error al crear el hilo player");
                     break;
                 }
-
-                enemyReadyToBattle = false;
             }
 
             usleep(1000000);        
@@ -230,27 +224,6 @@ void *createMotherShip(void *arg)
     }
     
 
-}
-
-void desingEnemy(struct EnemyDesing* en)
-{ 
-    switch (getRamdomNumberInterval(0,2))
-    {
-        case 0:
-            en->shipModel = 0;
-            en->buildTime = 1;
-            break;
-        case 1:
-            en->shipModel = 1;
-            en->buildTime = 2;
-            break;
-        case 2:
-            en->shipModel = 2;
-            en->buildTime = 4;
-            break;
-        default:
-            break;
-    }
 }
 
 void *createEnemy(void *arg)
@@ -337,7 +310,7 @@ void HangarInsert(struct HangarNode *newEnemy)
 
     while (count < enemiesInConstruction)
     {
-        if(newEnemy->ship->buildTime < iterator->next->ship->buildTime)
+        if(newEnemy->buildTime < iterator->next->buildTime)
         {
             newEnemy->next = iterator->next;
             break;
@@ -351,11 +324,8 @@ void HangarInsert(struct HangarNode *newEnemy)
     enemiesInConstruction++;
 }
 
-struct EnemyDesing *HangarBuild()
-{
-    struct EnemyDesing *enemyToReturn;
-    enemyReadyToBattle = false;
-    
+int HangarBuild()
+{    
     if(enemiesInConstruction > 0)
     {
         if(leafPriority == PRIORITY && enemiesInConstruction > 1)
@@ -367,7 +337,7 @@ struct EnemyDesing *HangarBuild()
                 iterator = iterator->next;
             }
 
-            iterator->next->ship->buildTime--;
+            iterator->next->buildTime--;
             struct HangarNode *boost = iterator->next;
             iterator->next = NULL;
             enemiesInConstruction--;
@@ -375,24 +345,60 @@ struct EnemyDesing *HangarBuild()
             HangarInsert(boost);
             
         }
-        else if(hangarRoot.next->ship->buildTime <= 1)
+        
+        if(hangarRoot.next->buildTime <= 1)
         {
-            hangarRoot.next->ship->buildTime = 0;
-            enemyToReturn = hangarRoot.next->ship;
-            hangarRoot.next = hangarRoot.next->next;
+            struct HangarNode *builtEnemy = hangarRoot.next;
+            int model = builtEnemy->shipModel;
+            hangarRoot.next = builtEnemy->next;
             enemiesInConstruction--;
-            enemyReadyToBattle = true;
+            free(builtEnemy);
+            return model;
         }
         else
         {
-            hangarRoot.next->ship->buildTime--;     
+            hangarRoot.next->buildTime--;     
         }
         
         
     }   
     
     leafPriority++;
-    return enemyToReturn;
+    return -1;
+}
+
+void desingEnemy(struct HangarNode* en)
+{
+    
+    switch (getRamdomNumberInterval(0,2))
+    {
+        case 0:
+            en->shipModel = 0;
+            en->buildTime = 1;
+            break;
+        case 1:
+            en->shipModel = 1;
+            en->buildTime = 2;
+            break;
+        case 2:
+            en->shipModel = 2;
+            en->buildTime = 3;
+            break;
+        default:
+            break;
+    }
+}
+
+void destroyUnbuildEnemies()
+{
+    struct HangarNode *iterator = hangarRoot.next;
+    struct HangarNode *toDestroy;
+    for (int count = 0; count < enemiesInConstruction; count++)
+    {
+        toDestroy = iterator;
+        iterator = iterator->next;
+        free(toDestroy);
+    }
 }
 
 // EnemyList
