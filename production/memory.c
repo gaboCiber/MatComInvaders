@@ -3,42 +3,50 @@
 #include <unistd.h>
 #include <time.h>
 #include <stdlib.h>
-#include "invaderstruct.h"
+#include "../invaderstruct.h"
 #include "stdbool.h"
-
-
 
 struct FreeEnemyBlock rootBlock;
 int numberOfFreeBlock;
 const int TOP=10;
 struct Enemy *enemyList[10];
+int numberOfEnemiesOnBattle;
 
 void EnemyListInsert(struct Enemy *enemy)
 {
-    if(numberOfFreeBlock > 0)
+    if(numberOfEnemiesOnBattle < TOP)
     {
         enemyList[rootBlock.next->index] = enemy;
         enemy->indexAtEnemyList = rootBlock.next->index;
 
         if(rootBlock.next->length == 1)
         {
+            struct FreeEnemyBlock *blockToErase = rootBlock.next;
             rootBlock.next = (numberOfFreeBlock > 1) ? rootBlock.next->next : NULL;
             numberOfFreeBlock--;
+            free(blockToErase);
         }
         else
         {
             rootBlock.next->index++;
             rootBlock.next->length--;
         }
+
+        numberOfEnemiesOnBattle++;
     }
     
 }
 
-void EnemyListRemove(struct FreeEnemyBlock *newBlock)
+void EnemyListRemove(int index)
 {
-    if(newBlock->index >= 0 && newBlock->index < TOP)
+    if(numberOfEnemiesOnBattle > 0 && index >= 0 && index < TOP)
     {
-        enemyList[newBlock->index]->indexAtEnemyList = -1;
+        struct FreeEnemyBlock *newBlock = (struct FreeEnemyBlock *) malloc(sizeof(struct FreeEnemyBlock));
+        newBlock->index = index;
+        newBlock->length = 1;
+
+        enemyList[index]->indexAtEnemyList = -1;
+        enemyList[index] = NULL;
 
         int count = 0;
         struct FreeEnemyBlock * iterator = &rootBlock;
@@ -52,6 +60,7 @@ void EnemyListRemove(struct FreeEnemyBlock *newBlock)
                 if(before)
                 {
                     iterator->length++;
+                    free(newBlock);
                 }
                 else
                 {
@@ -68,17 +77,24 @@ void EnemyListRemove(struct FreeEnemyBlock *newBlock)
                 if(before && after)
                 {
                     iterator->length += 1 + iterator->next->length;
-                    iterator->next = iterator->next->next;
+                    
+                    struct FreeEnemyBlock *fbAfter = iterator->next;
+                    iterator->next = fbAfter->next;
                     numberOfFreeBlock--;
+
+                    free(newBlock);
+                    free(fbAfter);
                 }
                 else if(before)
                 {
                     iterator->length++;
+                    free(newBlock);
                 }
                 else if (after)
                 {
                     iterator->next->index--;
                     iterator->next->length++;
+                    free(newBlock);
                 }
                 else
                 {
@@ -92,14 +108,16 @@ void EnemyListRemove(struct FreeEnemyBlock *newBlock)
 
             iterator = iterator->next;
             count++;        
-        }    
+        }  
+
+        numberOfEnemiesOnBattle--;  
     }
 
 }
 
 bool EnemyListIsOneLeft()
 {
-    return numberOfFreeBlock > 0;
+    return numberOfEnemiesOnBattle < TOP;
 }
 
 int EnemyListCheckPositions(int line, int col)
@@ -124,62 +142,75 @@ int EnemyListCheckPositions(int line, int col)
     
 }
 
+void EnemyListEraseAllBlocksFromMemory()
+{
+    struct FreeEnemyBlock *iterator = rootBlock.next;
+    for (int i = 0; i < TOP; i++)
+    {
+        if(numberOfFreeBlock > 0 && i == iterator->index)
+        {
+            i+= iterator->length - 1;
+            struct FreeEnemyBlock *toErase = iterator;
+            iterator = iterator->next;
+            free(toErase);
+            numberOfFreeBlock--;
+            continue;
+        }
+
+        free(enemyList[i]);
+        enemyList[i] = NULL;
+    }
+
+    rootBlock.next = NULL;
+
+}
+
 int main()
 {
+    srand(time(0));
+
     rootBlock.index = -2;
     rootBlock.length = -2;
 
-    struct FreeEnemyBlock initial;
-    initial.index = 0;
-    initial.length = TOP;
+    struct FreeEnemyBlock *initial = (struct FreeEnemyBlock *) malloc(sizeof(struct FreeEnemyBlock));
+    initial->index = 0;
+    initial->length = TOP;
 
-    rootBlock.next = &initial;
+    rootBlock.next = initial;
     numberOfFreeBlock = 1;
 
-    struct Enemy e1;
-    e1.ch = 'Q'; 
-    EnemyListInsert(&e1);
-
-    struct Enemy e2;
-    e2.ch = 'W'; 
-    EnemyListInsert(&e2);
-
-    struct Enemy e3;
-    e3.ch = 'E'; 
-    EnemyListInsert(&e3);
-
-    struct Enemy e4;
-    e4.ch = 'R'; 
-    EnemyListInsert(&e4);
-
-    struct Enemy e5;
-    e5.ch = 'T'; 
-    EnemyListInsert(&e5);
-
-    struct FreeEnemyBlock b1;
-    b1.index = 0;
-    b1.length = 1;
-    EnemyListRemove(&b1);
-
+    bool ocu[TOP];
+    for (int i = 0; i < TOP; i++)
+    {
+        ocu[i] = false;
+    }
     
-    struct FreeEnemyBlock b2;
-    b2.index = 2;
-    b2.length = 1;
-    EnemyListRemove(&b2);
-    
-    struct FreeEnemyBlock b3;
-    b3.index = 4;
-    b3.length = 1;
-    EnemyListRemove(&b3);
+    int count = 0;
+    for (int i = 0; i < 1000; i++)
+    {
+        if(rand() % 2)
+        {
+            struct Enemy *en = (struct Enemy *) malloc(sizeof(struct Enemy));
+            en->ch = (char) ((int) 'A' + i); 
+            EnemyListInsert(en);
+            ocu[en->indexAtEnemyList] = true;
+        }
+        else 
+        {           
+            int index = 0;
+            if(numberOfEnemiesOnBattle > 0)
+            {
+                do {
+                    index = rand() % 10;
+                } while (!ocu[index]);
+            }     
+            
+            ocu[index] = false;
+            EnemyListRemove(index);
+        }
+    }
 
-    struct FreeEnemyBlock b4;
-    b4.index = 4;
-    b4.length = 1;
-    EnemyListRemove(&b4);
+    printf("Sucess \n");
 
-    struct FreeEnemyBlock b5;
-    b5.index = 2;
-    b5.length = 1;
-    EnemyListRemove(&b5);
-
+    EnemyListEraseAllBlocksFromMemory();
 }

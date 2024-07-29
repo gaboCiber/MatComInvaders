@@ -25,14 +25,16 @@ void *createEnemy(void *arg);
 
 
 // EnemyList 
+struct FreeEnemyBlock rootBlock;
+int numberOfFreeBlock;
 const int TOP=10;
 struct Enemy *enemyList[10];
-bool ocupied[10];
-int count = 0;
-int EnemyListInsert(struct Enemy *enemy);
+int numberOfEnemiesOnBattle;
+void EnemyListInsert(struct Enemy *enemy);
 void EnemyListRemove(int index);
 bool EnemyListIsOneLeft();
 int EnemyListCheckPositions(int line, int col);
+void EnemyListEraseAllBlocksFromMemory();
 
 // Hangar 
 struct HangarNode hangarRoot;
@@ -60,6 +62,18 @@ int main()
     keypad(stdscr, TRUE);
     curs_set(0);
 
+    // Set Memory for Enemies
+    rootBlock.index = -2;
+    rootBlock.length = -2;
+
+    struct FreeEnemyBlock *initial = (struct FreeEnemyBlock *) malloc(sizeof(struct FreeEnemyBlock));
+    initial->index = 0;
+    initial->length = TOP;
+
+    rootBlock.next = initial;
+    numberOfFreeBlock = 1;
+
+    // Set MotherSip
     setMotherShip();
     pthread_t mothership;
     int ship = pthread_create(&mothership, NULL, createMotherShip, NULL);
@@ -69,6 +83,7 @@ int main()
         return 1;
     }
     
+    // Set Player
     pthread_t playerThread;
     int player = pthread_create(&playerThread, NULL, createPlayerThread, NULL);
     if(player != 0)
@@ -142,14 +157,15 @@ void *createBullet(void *arg)
         int killEnemy = EnemyListCheckPositions(bullet.line, bullet.col);
         if(killEnemy >= 0)
         {
-            EnemyListRemove(killEnemy);
             mvaddch(bullet.line, bullet.col,' ');
+            EnemyListRemove(killEnemy);
             break;
         }
 
         pthread_mutex_lock(&mutex);
         refresh();
         pthread_mutex_unlock(&mutex);
+        
         usleep(50000);
 
         mvaddch(bullet.line, bullet.col,' ');
@@ -187,6 +203,7 @@ void *createMotherShip(void *arg)
     while (true)
     {
         // Without Scheduling
+        
         /*pthread_t enemyThread;       
         int en = pthread_create(&enemyThread, NULL, createEnemy, (void *) (intptr_t) (getRamdomNumberInterval(0,2)));
         if(en != 0)
@@ -200,6 +217,7 @@ void *createMotherShip(void *arg)
         usleep(1000000);*/
         
         // Scheduling
+        
         if(EnemyListIsOneLeft())
         {
             struct HangarNode *newEnemy = (struct HangarNode*) malloc(sizeof(struct HangarNode));
@@ -218,7 +236,7 @@ void *createMotherShip(void *arg)
                 }
             }
 
-            usleep(1000000);        
+            usleep(3000000);        
         }
               
     }
@@ -232,7 +250,7 @@ void *createEnemy(void *arg)
     struct Enemy enemy;
     enemy.line = 3;
     enemy.col = getRamdomNumberInterval(5, COLUMNS-5);
-    enemy.indexAtEnemyList = EnemyListInsert(&enemy);
+    EnemyListInsert(&enemy);
     
     switch ( (int) (intptr_t) arg )
     {
@@ -286,8 +304,8 @@ void *createEnemy(void *arg)
 
         if(!(enemy.line > 0 && enemy.line < ROWS - 1 && enemy.col > 0 && enemy.col < COLUMNS - 1))
         {
-            EnemyListRemove(enemy.indexAtEnemyList);
             mvaddch(enemy.line, enemy.col,' ');
+            EnemyListRemove(enemy.indexAtEnemyList);
             break;
         }     
         
@@ -402,43 +420,128 @@ void destroyUnbuildEnemies()
 }
 
 // EnemyList
-int EnemyListInsert(struct Enemy *enemy)
+void EnemyListInsert(struct Enemy *enemy)
 {
-    int i = 0;
-    for (i = 0; i < 10; i++)
+    if(numberOfEnemiesOnBattle < TOP)
     {
-        if(!ocupied[i])
-        {
-            enemyList[i] = enemy;
-            ocupied[i]=true;
-            count++;
-            return i;
-        }
-    }
+        enemyList[rootBlock.next->index] = enemy;
+        enemy->indexAtEnemyList = rootBlock.next->index;
 
-    return -1;
+        if(rootBlock.next->length == 1)
+        {
+            struct FreeEnemyBlock *blockToErase = rootBlock.next;
+            rootBlock.next = (numberOfFreeBlock > 1) ? rootBlock.next->next : NULL;
+            numberOfFreeBlock--;
+            free(blockToErase);
+        }
+        else
+        {
+            rootBlock.next->index++;
+            rootBlock.next->length--;
+        }
+
+        numberOfEnemiesOnBattle++;
+    }
     
 }
 
 void EnemyListRemove(int index)
 {
-    if(index >= 0 && index < count)
+    if(numberOfEnemiesOnBattle > 0 && index >= 0 && index < TOP)
     {
+        struct FreeEnemyBlock *newBlock = (struct FreeEnemyBlock *) malloc(sizeof(struct FreeEnemyBlock));
+        newBlock->index = index;
+        newBlock->length = 1;
+
         enemyList[index]->indexAtEnemyList = -1;
-        ocupied[index] = false;
-        count--;   
+        enemyList[index] = NULL;
+
+        int count = 0;
+        struct FreeEnemyBlock * iterator = &rootBlock;
+        
+        while (true)
+        {
+            bool before = iterator->index + iterator->length == newBlock->index;
+            
+            if(count == numberOfFreeBlock)
+            {
+                if(before)
+                {
+                    iterator->length++;
+                    free(newBlock);
+                }
+                else
+                {
+                    iterator->next = newBlock; 
+                    numberOfFreeBlock++; 
+                }
+
+                break;
+            }
+            else if(newBlock->index < iterator->next->index)
+            {
+                bool after = newBlock->index + 1 == iterator->next->index;
+
+                if(before && after)
+                {
+                    iterator->length += 1 + iterator->next->length;
+                    
+                    struct FreeEnemyBlock *fbAfter = iterator->next;
+                    iterator->next = fbAfter->next;
+                    numberOfFreeBlock--;
+
+                    free(newBlock);
+                    free(fbAfter);
+                }
+                else if(before)
+                {
+                    iterator->length++;
+                    free(newBlock);
+                }
+                else if (after)
+                {
+                    iterator->next->index--;
+                    iterator->next->length++;
+                    free(newBlock);
+                }
+                else
+                {
+                    newBlock->next = iterator->next;
+                    iterator->next = newBlock;
+                    numberOfFreeBlock++;
+                } 
+
+                break; 
+            }   
+
+            iterator = iterator->next;
+            count++;        
+        }  
+
+        numberOfEnemiesOnBattle--;  
     }
+
 }
 
 bool EnemyListIsOneLeft()
 {
-    return count < TOP;
+    return numberOfEnemiesOnBattle < TOP;
 }
 
 int EnemyListCheckPositions(int line, int col)
 {
-    for (int i = 0; i < count; i++)
+    struct FreeEnemyBlock *iterator = &rootBlock;
+    int count = 0;
+    for (int i = 0; i < TOP; i++)
     {
+        if(count < numberOfFreeBlock && i == iterator->next->index)
+        {
+            i += iterator->next->length - 1;
+            iterator = iterator->next;
+            count++;
+            continue;
+        }
+        
         if( enemyList[i]->line == line && enemyList[i]->col == col)
             return i;
     }
@@ -447,6 +550,28 @@ int EnemyListCheckPositions(int line, int col)
     
 }
 
+void EnemyListEraseAllBlocksFromMemory()
+{
+    struct FreeEnemyBlock *iterator = rootBlock.next;
+    for (int i = 0; i < TOP; i++)
+    {
+        if(numberOfFreeBlock > 0 && i == iterator->index)
+        {
+            i+= iterator->length - 1;
+            struct FreeEnemyBlock *toErase = iterator;
+            iterator = iterator->next;
+            free(toErase);
+            numberOfFreeBlock--;
+            continue;
+        }
+
+        free(enemyList[i]);
+        enemyList[i] = NULL;
+    }
+
+    rootBlock.next = NULL;
+
+}
 
 // General
 int getRamdomNumberInterval(int min, int max)

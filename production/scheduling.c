@@ -3,15 +3,8 @@
 #include <unistd.h>
 #include <time.h>
 #include <stdlib.h>
-#include "invaderstruct.h"
+#include "../invaderstruct.h"
 #include "stdbool.h"
-
-struct HangarNode
-{
-    int shipModel;
-    int buildTime;
-    struct HangarNode *next;
-};
 
 struct HangarNode hangarRoot;
 int enemiesInConstruction = 0;
