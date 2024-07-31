@@ -8,7 +8,7 @@
 
 struct FreeEnemyBlock rootBlock;
 int numberOfFreeBlock;
-const int TOP=10;
+int TOP=10;
 struct Enemy *enemyList[10];
 int numberOfEnemiesOnBattle;
 
@@ -165,10 +165,8 @@ void EnemyListEraseAllBlocksFromMemory()
 
 }
 
-int main()
+void EnemyListRamdomExample()
 {
-    srand(time(0));
-
     rootBlock.index = -2;
     rootBlock.length = -2;
 
@@ -186,7 +184,7 @@ int main()
     }
     
     int count = 0;
-    for (int i = 0; i < 1000; i++)
+    for (int i = 0; i < 20; i++)
     {
         if(rand() % 2)
         {
@@ -212,5 +210,11 @@ int main()
 
     printf("Sucess \n");
 
-    EnemyListEraseAllBlocksFromMemory();
+    //EnemyListEraseAllBlocksFromMemory();
 }
+
+/*int main()
+{
+    srand(time(0));
+    EnemyListRamdomExample();
+}*/

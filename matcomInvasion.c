@@ -570,6 +570,7 @@ void EnemyListEraseAllBlocksFromMemory()
     }
 
     rootBlock.next = NULL;
+    numberOfEnemiesOnBattle = 0;
 
 }
 

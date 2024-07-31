@@ -2,6 +2,7 @@
     "files.associations": {
         "curses.h": "c",
         "pthread.h": "c",
-        "invaderstruct.h": "c"
+        "invaderstruct.h": "c",
+        "ncurses.h": "c"
     }
 }

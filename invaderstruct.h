@@ -20,6 +20,7 @@ struct Enemy
     int upDownCount;
     int leftRightCount; 
     int indexAtEnemyList;
+    int shipModel;
 } ;
 
 struct HangarNode
