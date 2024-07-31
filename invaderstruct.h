@@ -23,12 +23,20 @@ struct Enemy
     int shipModel;
 } ;
 
+struct EnemyToBield
+{
+    int indexAtEnemyList;
+    int shipModel;
+    bool hasBeenSaved;
+};
+
 struct HangarNode
 {
     int shipModel;
     int buildTime;
     struct HangarNode *next;
 };
+
 struct FreeEnemyBlock
 {
     int index;

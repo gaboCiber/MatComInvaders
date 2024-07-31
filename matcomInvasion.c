@@ -20,8 +20,8 @@ void *createPlayerThread(void *arg);
 
 // MotherShip and Enemies 
 void setMotherShip();
-void *createMotherShip(void *arg);
-void *createEnemy(void *arg);
+void *createMotherShipThread(void *arg);
+void *createEnemyThread(void *arg);
 
 
 // EnemyList 
@@ -76,7 +76,7 @@ int main()
     // Set MotherSip
     setMotherShip();
     pthread_t mothership;
-    int ship = pthread_create(&mothership, NULL, createMotherShip, NULL);
+    int ship = pthread_create(&mothership, NULL, createMotherShipThread, NULL);
     if(ship != 0)
     {
         perror("Error al crear el hilo player");
@@ -198,7 +198,7 @@ void setMotherShip()
     refresh();
 }
 
-void *createMotherShip(void *arg)
+void *createMotherShipThread(void *arg)
 {   
     while (true)
     {
@@ -220,15 +220,19 @@ void *createMotherShip(void *arg)
         
         if(EnemyListIsOneLeft())
         {
-            struct HangarNode *newEnemy = (struct HangarNode*) malloc(sizeof(struct HangarNode));
-            desingEnemy(newEnemy);
-            HangarInsert(newEnemy);
+            struct HangarNode *hangar = (struct HangarNode*) malloc(sizeof(struct HangarNode));
+            desingEnemy(hangar);
+            HangarInsert(hangar);
             int model = HangarBuild();
             
             if(model >= 0)
             {
+                struct EnemyToBield enemy;
+                enemy.shipModel = model;
+                enemy.hasBeenSaved = false;
+                
                 pthread_t enemyThread;       
-                int en = pthread_create(&enemyThread, NULL, createEnemy, (void *) (intptr_t) model);
+                int en = pthread_create(&enemyThread, NULL, createEnemyThread, (void *) &enemy);
                 if(en != 0)
                 {
                     perror("Error al crear el hilo player");
@@ -244,43 +248,54 @@ void *createMotherShip(void *arg)
 
 }
 
-void *createEnemy(void *arg)
+void *createEnemyThread(void *arg)
 {
+    struct EnemyToBield *toBield = (struct EnemyToBield*) arg;
+
     // Construction
-    struct Enemy enemy;
-    enemy.line = 3;
-    enemy.col = getRamdomNumberInterval(5, COLUMNS-5);
-    EnemyListInsert(&enemy);
+    struct Enemy *enemy = (struct Enemy *) malloc(sizeof(struct Enemy));
     
-    switch ( (int) (intptr_t) arg )
+    if(toBield->hasBeenSaved)
+    {
+        enemy = enemyList[toBield->indexAtEnemyList];
+    }
+    else
+    {
+        enemy->line = 3;
+        enemy->col = getRamdomNumberInterval(5, COLUMNS-5);
+        enemy->shipModel = toBield->shipModel;
+        EnemyListInsert(enemy);
+    }   
+    
+    switch ( enemy->shipModel )
     {
         case 0:
-            enemy.ch = '&';   
-            enemy.leftRight =  (int[1]) {0};
-            enemy.leftRightCount = 1;  
-            enemy.upDown = (int[1]) {1};
-            enemy.upDownCount = 1;
+            enemy->ch = '&';   
+            enemy->leftRight =  (int[1]) {0};
+            enemy->leftRightCount = 1;  
+            enemy->upDown = (int[1]) {1};
+            enemy->upDownCount = 1;
             break;
         case 1:
-            enemy.ch = '#';   
-            enemy.leftRight =  (int[3]) {-1, 0 , 1};
-            enemy.leftRightCount = 3;  
-            enemy.upDown = (int[2]) {0 , 1};
-            enemy.upDownCount = 2;
+            enemy->ch = '#';   
+            enemy->leftRight =  (int[3]) {-1, 0 , 1};
+            enemy->leftRightCount = 3;  
+            enemy->upDown = (int[2]) {0 , 1};
+            enemy->upDownCount = 2;
             break;
         case 2:
-            enemy.ch = '$';   
-            enemy.leftRight =  (int[2]) {-2,2};
-            enemy.leftRightCount = 2;  
-            enemy.upDown = (int[1]) {1};
-            enemy.upDownCount = 1;
+            enemy->ch = '$';   
+            enemy->leftRight =  (int[2]) {-2,2};
+            enemy->leftRightCount = 2;  
+            enemy->upDown = (int[1]) {1};
+            enemy->upDownCount = 1;
             break;
         default:
             break;
     }
     
     // On battle
-    mvaddch(enemy.line, enemy.col,enemy.ch);
+    mvaddch(enemy->line, enemy->col,enemy->ch);
 
     pthread_mutex_lock(&mutex);
     refresh();
@@ -290,22 +305,23 @@ void *createEnemy(void *arg)
 
     while (true)
     {
-        mvaddch(enemy.line, enemy.col,' ');
+        mvaddch(enemy->line, enemy->col,' ');
         
-        getRandomPos(&enemy);
+        getRandomPos(enemy);
         
-        mvaddch(enemy.line, enemy.col,enemy.ch);
+        mvaddch(enemy->line, enemy->col,enemy->ch);
         
-        if(enemy.indexAtEnemyList == -1)
+        if(enemy->indexAtEnemyList == -1)
         {
-            mvaddch(enemy.line, enemy.col,' ');
+            mvaddch(enemy->line, enemy->col,' ');
             break;
         }  
 
-        if(!(enemy.line > 0 && enemy.line < ROWS - 1 && enemy.col > 0 && enemy.col < COLUMNS - 1))
+        if(!(enemy->line > 0 && enemy->line < ROWS - 1 && enemy->col > 0 && enemy->col < COLUMNS - 1))
         {
-            mvaddch(enemy.line, enemy.col,' ');
-            EnemyListRemove(enemy.indexAtEnemyList);
+            mvaddch(enemy->line, enemy->col,' ');
+            EnemyListRemove(enemy->indexAtEnemyList);
+            free(enemy);
             break;
         }     
         

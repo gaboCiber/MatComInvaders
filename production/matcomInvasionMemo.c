@@ -20,7 +20,7 @@ void *createPlayerThread(void *arg);
 
 // MotherShip and Enemies 
 void setMotherShip();
-void *createMotherShip(void *arg);
+void *createMotherShipThread(void *arg);
 void desingEnemy(struct EnemyDesing* en);
 void *createEnemy(void *arg);
 
@@ -74,7 +74,7 @@ int main()
 
     setMotherShip();
     pthread_t mothership;
-    int ship = pthread_create(&mothership, NULL, createMotherShip, NULL);
+    int ship = pthread_create(&mothership, NULL, createMotherShipThread, NULL);
     if(ship != 0)
     {
         perror("Error al crear el hilo player");
@@ -198,7 +198,7 @@ void setMotherShip()
     refresh();
 }
 
-void *createMotherShip(void *arg)
+void *createMotherShipThread(void *arg)
 {   
     while (true)
     {
