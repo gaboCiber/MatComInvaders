@@ -11,10 +11,12 @@ int COLUMNS, ROWS;
 pthread_mutex_t mutex;
 pthread_attr_t threadDetachedAttr;
 bool screenOnPause = false;
-bool gameEnd = false;
+bool gameClose = false;
 
 int getRamdomNumberInterval(int min, int max);
 void getRandomPos(struct Enemy *en);
+void screenRefresh();
+void gameOver(int i);
 
 // Player 
 struct Player player;
@@ -41,6 +43,7 @@ void EnemyListEraseAllBlocksFromMemory();
 
 // Hangar 
 struct HangarNode hangarRoot;
+int totalEnemiesShips = 20;
 int enemiesInConstruction = 0;
 int leafPriority = 0;
 const int PRIORITY = 2;
@@ -98,6 +101,8 @@ int main()
         return 1;
     }
 
+    //screenRefresh();
+
     pthread_join(playerThread, NULL);
     pthread_join(mothership, NULL); 
     EnemyListEraseAllBlocksFromMemory();
@@ -117,11 +122,12 @@ void *createPlayerThread(void *arg)
     player.line = ROWS-1;
     player.col = COLUMNS/2;
     player.ch = '^';
+    player.hp = player.totalHp = 15;
 
     mvaddch(player.line, player.col,player.ch);
 
     int inputKeyBoard;
-    while ((inputKeyBoard = getch()) != KEY_F(4) && inputKeyBoard != ERR)
+    while ((inputKeyBoard = getch()) != KEY_F(4) && inputKeyBoard != ERR && !gameClose)
     {
         if( (inputKeyBoard == KEY_RIGHT || inputKeyBoard == KEY_LEFT) )
         {            
@@ -168,12 +174,7 @@ void *createPlayerThread(void *arg)
         else if(inputKeyBoard == 'q')
         {
             pthread_mutex_lock(&mutex);
-
-            clear();
-            mvaddstr(LINES/2 - 1, COLUMNS/2 - 5, "SEE YOU");
-            refresh();
-            gameEnd = true;
-
+            gameOver(0);
             pthread_mutex_unlock(&mutex);
 
             break;
@@ -193,7 +194,7 @@ void *createBullet(void *arg)
     bullet.line = ROWS-2;
     bullet.col = player.col;
 
-    while (bullet.line > 1 && !gameEnd)
+    while (bullet.line > 1 && !gameClose)
     {
         mvaddch(bullet.line, bullet.col,bullet.ch);
 
@@ -206,7 +207,7 @@ void *createBullet(void *arg)
         }
 
         pthread_mutex_lock(&mutex);       
-        refresh();
+        screenRefresh();
         pthread_mutex_unlock(&mutex);
         
         usleep(50000);
@@ -243,13 +244,28 @@ void setMotherShip()
 
 void *createMotherShipThread(void *arg)
 {   
-    while (!gameEnd)
+    int totalNumberOfEnemiesInHangar = 0;
+    while (!gameClose)
     {
+        if(numberOfEnemiesOnBattle == 0 && totalNumberOfEnemiesInHangar == totalEnemiesShips)
+        {
+            pthread_mutex_lock(&mutex);
+            gameOver(1);
+            pthread_mutex_unlock(&mutex);
+
+            break;
+        }
+
         if(EnemyListIsOneLeft() && !screenOnPause)
         {
-            struct HangarNode *hangar = (struct HangarNode*) malloc(sizeof(struct HangarNode));
-            desingEnemy(hangar);
-            HangarInsert(hangar);
+            if(totalNumberOfEnemiesInHangar < totalEnemiesShips)
+            {
+                struct HangarNode *hangar = (struct HangarNode*) malloc(sizeof(struct HangarNode));
+                desingEnemy(hangar);
+                HangarInsert(hangar);
+                totalNumberOfEnemiesInHangar++;
+            }
+
             int model = HangarBuild();
             
             if(model >= 0)
@@ -326,12 +342,12 @@ void *createEnemyThread(void *arg)
     mvaddch(enemy->line, enemy->col,enemy->ch);
 
     pthread_mutex_lock(&mutex);
-    refresh();
+    screenRefresh();
     pthread_mutex_unlock(&mutex);
 
     bool insideScreen = 1;
 
-    while (!gameEnd)
+    while (!gameClose)
     {
         mvaddch(enemy->line, enemy->col,' ');
         
@@ -345,16 +361,33 @@ void *createEnemyThread(void *arg)
             break;
         }  
 
+        if(enemy->line > LINES - 2 )
+        {
+            pthread_mutex_lock(&mutex);           
+            player.hp -= enemy->shipModel + 1;
+
+            if(player.hp <= 0)
+            {
+                gameOver(-1);
+                break;   
+            }
+            pthread_mutex_unlock(&mutex);
+        }
+
+        
         if(!(enemy->line > 0 && enemy->line < ROWS - 1 && enemy->col > 0 && enemy->col < COLUMNS - 1))
         {
+            pthread_mutex_lock(&mutex);           
             mvaddch(enemy->line, enemy->col,' ');
             EnemyListRemove(enemy->indexAtEnemyList);
             free(enemy);
+            
+            pthread_mutex_unlock(&mutex);
             break;
         }     
         
         pthread_mutex_lock(&mutex);
-        refresh();
+        screenRefresh();
         pthread_mutex_unlock(&mutex);
         
         usleep(500000);
@@ -631,3 +664,42 @@ void getRandomPos(struct Enemy *en)
     en->line += *(en->upDown + (rand() % en->upDownCount));
 }
 
+void screenRefresh()
+{
+    char hp[12], thp[12];
+    sprintf(hp, "%d", player.hp);
+    sprintf(thp, "%d", player.totalHp);
+
+
+    setMotherShip();
+    mvaddstr(0, COLUMNS/2 - 11, "Player HP: ");
+    mvaddstr(0, COLUMNS/2, "        ");
+    mvaddstr(0, COLUMNS/2, hp);
+    mvaddstr(0, COLUMNS/2 + 2, "/");
+    mvaddstr(0, COLUMNS/2 + 3,thp);
+    refresh();
+}
+
+void gameOver(int i)
+{
+    clear();
+    mvaddstr(LINES/2 - 1, COLUMNS/2 - 5, "SEE YOU");
+
+    switch (i)
+    {
+        case -1:
+            mvaddstr(LINES/2 - 1, COLUMNS/2 - 5, "YOU LOSE");
+            break;
+        case 0:
+            mvaddstr(LINES/2 - 1, COLUMNS/2 - 5, "SEE YOU");
+            break;
+        case 1:
+            mvaddstr(LINES/2 - 1, COLUMNS/2 - 5, "YOU WIN");
+        default:
+            break;
+    }
+
+    refresh();
+    gameClose = true;
+    sleep(1);
+}

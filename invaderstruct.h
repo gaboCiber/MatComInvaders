@@ -2,6 +2,8 @@ struct Player
 {
 	int line, col;
 	char ch;
+    int hp;
+    int totalHp;
 } ;
 
 struct Bullet
