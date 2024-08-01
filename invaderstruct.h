@@ -27,7 +27,7 @@ struct EnemyToBield
 {
     int indexAtEnemyList;
     int shipModel;
-    bool hasBeenSaved;
+    bool isOnBattle;
 };
 
 struct HangarNode

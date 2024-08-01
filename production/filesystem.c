@@ -322,7 +322,7 @@ void FileWhiteSpaceRemove(char *line)
     strcpy(line, result);
 }
 
-bool FileconvertStringToInt(char *str, int *num)
+bool FileConvertStringToInt(char *str, int *num)
 {
     char *endptr;
     long int number = strtol(str, &endptr, 10);
@@ -369,7 +369,7 @@ bool FileLoadEnemyList(const char *fileToRead)
         if(propertyName == "\n" || propertyName == NULL)
             continue;
 
-        if(propertyNumber != NULL && !FileconvertStringToInt(propertyNumber, &num))
+        if(propertyNumber != NULL && !FileConvertStringToInt(propertyNumber, &num))
             return false;
 
         

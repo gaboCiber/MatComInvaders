@@ -9,6 +9,9 @@
 // General
 int COLUMNS, ROWS;
 pthread_mutex_t mutex;
+pthread_attr_t threadDetachedAttr;
+bool screenOnPause = false;
+bool gameEnd = false;
 
 int getRamdomNumberInterval(int min, int max);
 void getRandomPos(struct Enemy *en);
@@ -52,7 +55,10 @@ int main()
 {
     
     srand(time(0));
+
     pthread_mutex_init(&mutex, 0);
+    pthread_attr_init(&threadDetachedAttr);
+    pthread_attr_setdetachstate(&threadDetachedAttr, PTHREAD_CREATE_DETACHED);
 
     initscr();
     cbreak();
@@ -92,12 +98,14 @@ int main()
         return 1;
     }
 
-
     pthread_join(playerThread, NULL);
     pthread_join(mothership, NULL); 
-    
+    EnemyListEraseAllBlocksFromMemory();
 
     pthread_mutex_destroy(&mutex);
+    pthread_attr_destroy(&threadDetachedAttr);
+
+    endwin();
     return 0;
 }
 
@@ -131,14 +139,49 @@ void *createPlayerThread(void *arg)
         else if(inputKeyBoard == KEY_UP)
         {
             pthread_t bulletThread;
-            int bullet = pthread_create(&bulletThread, NULL, createBullet, NULL);
+            int bullet = pthread_create(&bulletThread, &threadDetachedAttr, createBullet, NULL);
             if(bullet != 0)
             {
                 perror("Error al crear el hilo bullet");
                 break;
             }
         }
+        else if(inputKeyBoard == 'p')
+        {
+            pthread_mutex_lock(&mutex);
+            
+            clear();
+            mvaddstr(LINES/2 - 1, COLUMNS/2, "PAUSE");
+            mvaddstr(LINES/2, COLUMNS/2 - 10, "Press any key to continue");
+            screenOnPause = true;
+            refresh();
+
+            getch();
+            
+            clear();
+            setMotherShip();
+            screenOnPause = false;
+            refresh();
+            
+            pthread_mutex_unlock(&mutex);
+        }
+        else if(inputKeyBoard == 'q')
+        {
+            pthread_mutex_lock(&mutex);
+
+            clear();
+            mvaddstr(LINES/2 - 1, COLUMNS/2 - 5, "SEE YOU");
+            refresh();
+            gameEnd = true;
+
+            pthread_mutex_unlock(&mutex);
+
+            break;
+        }
+
     }
+
+    mvaddstr(0,30, "Player");
     pthread_exit(NULL);
 
 }
@@ -150,7 +193,7 @@ void *createBullet(void *arg)
     bullet.line = ROWS-2;
     bullet.col = player.col;
 
-    while (bullet.line > 1)
+    while (bullet.line > 1 && !gameEnd)
     {
         mvaddch(bullet.line, bullet.col,bullet.ch);
 
@@ -162,7 +205,7 @@ void *createBullet(void *arg)
             break;
         }
 
-        pthread_mutex_lock(&mutex);
+        pthread_mutex_lock(&mutex);       
         refresh();
         pthread_mutex_unlock(&mutex);
         
@@ -200,25 +243,9 @@ void setMotherShip()
 
 void *createMotherShipThread(void *arg)
 {   
-    while (true)
+    while (!gameEnd)
     {
-        // Without Scheduling
-        
-        /*pthread_t enemyThread;       
-        int en = pthread_create(&enemyThread, NULL, createEnemy, (void *) (intptr_t) (getRamdomNumberInterval(0,2)));
-        if(en != 0)
-        {
-            perror("Error al crear el hilo player");
-            break;
-        } 
-
-        
-        enemyReadyToBattle = false;
-        usleep(1000000);*/
-        
-        // Scheduling
-        
-        if(EnemyListIsOneLeft())
+        if(EnemyListIsOneLeft() && !screenOnPause)
         {
             struct HangarNode *hangar = (struct HangarNode*) malloc(sizeof(struct HangarNode));
             desingEnemy(hangar);
@@ -229,10 +256,10 @@ void *createMotherShipThread(void *arg)
             {
                 struct EnemyToBield enemy;
                 enemy.shipModel = model;
-                enemy.hasBeenSaved = false;
+                enemy.isOnBattle = false;
                 
                 pthread_t enemyThread;       
-                int en = pthread_create(&enemyThread, NULL, createEnemyThread, (void *) &enemy);
+                int en = pthread_create(&enemyThread, &threadDetachedAttr, createEnemyThread, (void *) &enemy);
                 if(en != 0)
                 {
                     perror("Error al crear el hilo player");
@@ -244,8 +271,9 @@ void *createMotherShipThread(void *arg)
         }
               
     }
-    
 
+    pthread_exit(NULL);
+    
 }
 
 void *createEnemyThread(void *arg)
@@ -255,7 +283,7 @@ void *createEnemyThread(void *arg)
     // Construction
     struct Enemy *enemy = (struct Enemy *) malloc(sizeof(struct Enemy));
     
-    if(toBield->hasBeenSaved)
+    if(toBield->isOnBattle)
     {
         enemy = enemyList[toBield->indexAtEnemyList];
     }
@@ -303,7 +331,7 @@ void *createEnemyThread(void *arg)
 
     bool insideScreen = 1;
 
-    while (true)
+    while (!gameEnd)
     {
         mvaddch(enemy->line, enemy->col,' ');
         
