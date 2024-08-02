@@ -12,7 +12,7 @@
 
 struct FreeEnemyBlock rootBlock;
 int numberOfFreeBlock;
-int TOP=10;
+int totalNumberOfEnemiesOnBattle=10;
 struct Enemy *enemyList[10];
 int numberOfEnemiesOnBattle;
 
@@ -60,7 +60,7 @@ void desingEnemy(struct Enemy *enemy)
 
 void EnemyListInsert(struct Enemy *enemy)
 {
-    if(numberOfEnemiesOnBattle < TOP)
+    if(numberOfEnemiesOnBattle < totalNumberOfEnemiesOnBattle)
     {
         enemyList[rootBlock.next->index] = enemy;
         enemy->indexAtEnemyList = rootBlock.next->index;
@@ -85,7 +85,7 @@ void EnemyListInsert(struct Enemy *enemy)
 
 void EnemyListRemove(int index)
 {
-    if(numberOfEnemiesOnBattle > 0 && index >= 0 && index < TOP)
+    if(numberOfEnemiesOnBattle > 0 && index >= 0 && index < totalNumberOfEnemiesOnBattle)
     {
         struct FreeEnemyBlock *newBlock = (struct FreeEnemyBlock *) malloc(sizeof(struct FreeEnemyBlock));
         newBlock->index = index;
@@ -163,14 +163,14 @@ void EnemyListRemove(int index)
 
 bool EnemyListIsOneLeft()
 {
-    return numberOfEnemiesOnBattle < TOP;
+    return numberOfEnemiesOnBattle < totalNumberOfEnemiesOnBattle;
 }
 
 int EnemyListCheckPositions(int line, int col)
 {
     struct FreeEnemyBlock *iterator = &rootBlock;
     int count = 0;
-    for (int i = 0; i < TOP; i++)
+    for (int i = 0; i < totalNumberOfEnemiesOnBattle; i++)
     {
         if(count < numberOfFreeBlock && i == iterator->next->index)
         {
@@ -191,7 +191,7 @@ int EnemyListCheckPositions(int line, int col)
 void EnemyListEraseAllBlocksFromMemory()
 {
     struct FreeEnemyBlock *iterator = rootBlock.next;
-    for (int i = 0; i < TOP; i++)
+    for (int i = 0; i < totalNumberOfEnemiesOnBattle; i++)
     {
         if(numberOfFreeBlock > 0 && i == iterator->index)
         {
@@ -219,13 +219,13 @@ void EnemyListRamdomExample()
 
     struct FreeEnemyBlock *initial = (struct FreeEnemyBlock *) malloc(sizeof(struct FreeEnemyBlock));
     initial->index = 0;
-    initial->length = TOP;
+    initial->length = totalNumberOfEnemiesOnBattle;
 
     rootBlock.next = initial;
     numberOfFreeBlock = 1;
 
-    bool ocu[TOP];
-    for (int i = 0; i < TOP; i++)
+    bool ocu[totalNumberOfEnemiesOnBattle];
+    for (int i = 0; i < totalNumberOfEnemiesOnBattle; i++)
     {
         ocu[i] = false;
     }
@@ -269,7 +269,7 @@ bool FileSaveEnemyList(const char *fileToWrite)
         return false;
     }
 
-    fprintf(file, "TOP: %d\n", TOP);
+    fprintf(file, "totalNumberOfEnemiesOnBattle: %d\n", totalNumberOfEnemiesOnBattle);
     
     fprintf(file, "numberOfFreeBlock: %d\n", numberOfFreeBlock);
     struct FreeEnemyBlock *iterator = &rootBlock;
@@ -284,7 +284,7 @@ bool FileSaveEnemyList(const char *fileToWrite)
     }
     
     fprintf(file, "numberOfEnemiesOnBattle: %d\n",numberOfEnemiesOnBattle);
-    for (int i = 0; i < TOP; i++)
+    for (int i = 0; i < totalNumberOfEnemiesOnBattle; i++)
     {
         if(enemyList[i] != NULL)
         {
@@ -406,9 +406,9 @@ bool FileLoadEnemyList(const char *fileToRead)
                 realNumberOfBlock++;
             }
         }
-        else if(strcmp(propertyName, "TOP") == 0)
+        else if(strcmp(propertyName, "totalNumberOfEnemiesOnBattle") == 0)
         {
-            TOP = num;
+            totalNumberOfEnemiesOnBattle = num;
         }
         else if(strcmp(propertyName, "numberOfEnemiesOnBattle") == 0)
         {

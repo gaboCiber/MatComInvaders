@@ -5,6 +5,8 @@
 #include <stdlib.h>
 #include "invaderstruct.h"
 #include "stdbool.h"
+#include <SDL2/SDL.h>
+
 
 // General
 int COLUMNS, ROWS;
@@ -12,16 +14,21 @@ pthread_mutex_t mutex;
 pthread_attr_t threadDetachedAttr;
 bool screenOnPause = false;
 bool gameClose = false;
+bool levelUp = false;
+int playerLevel = 1;
 
 int getRamdomNumberInterval(int min, int max);
 void getRandomPos(struct Enemy *en);
 void screenRefresh();
 void gameOver(int i);
+void gameStart();
+
 
 // Player 
 struct Player player;
 void *createBullet(void *arg);
 void *createPlayerThread(void *arg);
+//void bulletSound();
 
 // MotherShip and Enemies 
 void setMotherShip();
@@ -32,7 +39,7 @@ void *createEnemyThread(void *arg);
 // EnemyList 
 struct FreeEnemyBlock rootBlock;
 int numberOfFreeBlock;
-const int TOP=10;
+const int totalNumberOfEnemiesOnBattle=10;
 struct Enemy *enemyList[10];
 int numberOfEnemiesOnBattle;
 void EnemyListInsert(struct Enemy *enemy);
@@ -43,7 +50,7 @@ void EnemyListEraseAllBlocksFromMemory();
 
 // Hangar 
 struct HangarNode hangarRoot;
-int totalEnemiesShips = 20;
+int totalEnemiesOnThisLevel;
 int enemiesInConstruction = 0;
 int leafPriority = 0;
 const int PRIORITY = 2;
@@ -71,41 +78,7 @@ int main()
     keypad(stdscr, TRUE);
     curs_set(0);
 
-    // Set Memory for Enemies
-    rootBlock.index = -2;
-    rootBlock.length = -2;
-
-    struct FreeEnemyBlock *initial = (struct FreeEnemyBlock *) malloc(sizeof(struct FreeEnemyBlock));
-    initial->index = 0;
-    initial->length = TOP;
-
-    rootBlock.next = initial;
-    numberOfFreeBlock = 1;
-
-    // Set MotherSip
-    setMotherShip();
-    pthread_t mothership;
-    int ship = pthread_create(&mothership, NULL, createMotherShipThread, NULL);
-    if(ship != 0)
-    {
-        perror("Error al crear el hilo player");
-        return 1;
-    }
-    
-    // Set Player
-    pthread_t playerThread;
-    int player = pthread_create(&playerThread, NULL, createPlayerThread, NULL);
-    if(player != 0)
-    {
-        perror("Error al crear el hilo player");
-        return 1;
-    }
-
-    //screenRefresh();
-
-    pthread_join(playerThread, NULL);
-    pthread_join(mothership, NULL); 
-    EnemyListEraseAllBlocksFromMemory();
+    gameStart();
 
     pthread_mutex_destroy(&mutex);
     pthread_attr_destroy(&threadDetachedAttr);
@@ -119,11 +92,6 @@ int main()
 // Player
 void *createPlayerThread(void *arg)
 {    
-    player.line = ROWS-1;
-    player.col = COLUMNS/2;
-    player.ch = '^';
-    player.hp = player.totalHp = 15;
-
     mvaddch(player.line, player.col,player.ch);
 
     int inputKeyBoard;
@@ -151,6 +119,11 @@ void *createPlayerThread(void *arg)
                 perror("Error al crear el hilo bullet");
                 break;
             }
+
+            // pthread_mutex_lock(&mutex);
+            // bulletSound();
+            // pthread_mutex_unlock(&mutex);
+
         }
         else if(inputKeyBoard == 'p')
         {
@@ -182,7 +155,6 @@ void *createPlayerThread(void *arg)
 
     }
 
-    mvaddstr(0,30, "Player");
     pthread_exit(NULL);
 
 }
@@ -219,6 +191,30 @@ void *createBullet(void *arg)
     
     pthread_exit(NULL);
 }
+/*
+void bulletSound()
+{
+    SDL_Init(SDL_INIT_AUDIO);
+    
+    SDL_AudioSpec wavSpec;
+    Uint32 wavLength;
+    Uint8 *wavBuffer;
+
+    SDL_LoadWAV("../src/laser-zap-90575.wav", &wavSpec, &wavBuffer, &wavLength);
+
+    SDL_AudioDeviceID deviceId = SDL_OpenAudioDevice(NULL, 0, &wavSpec, NULL, 0);
+
+    int success = SDL_QueueAudio(deviceId, wavBuffer, wavLength);
+    SDL_PauseAudioDevice(deviceId, 0);
+
+    SDL_Delay(5000);
+
+    SDL_CloseAudioDevice(deviceId);
+    SDL_FreeWAV(wavBuffer);
+    SDL_Quit();
+
+}
+*/
 
 // MotherShip and Enemies
 
@@ -247,7 +243,7 @@ void *createMotherShipThread(void *arg)
     int totalNumberOfEnemiesInHangar = 0;
     while (!gameClose)
     {
-        if(numberOfEnemiesOnBattle == 0 && totalNumberOfEnemiesInHangar == totalEnemiesShips)
+        if(numberOfEnemiesOnBattle == 0 && totalNumberOfEnemiesInHangar == totalEnemiesOnThisLevel)
         {
             pthread_mutex_lock(&mutex);
             gameOver(1);
@@ -258,7 +254,7 @@ void *createMotherShipThread(void *arg)
 
         if(EnemyListIsOneLeft() && !screenOnPause)
         {
-            if(totalNumberOfEnemiesInHangar < totalEnemiesShips)
+            if(totalNumberOfEnemiesInHangar < totalEnemiesOnThisLevel)
             {
                 struct HangarNode *hangar = (struct HangarNode*) malloc(sizeof(struct HangarNode));
                 desingEnemy(hangar);
@@ -499,7 +495,7 @@ void destroyUnbuildEnemies()
 // EnemyList
 void EnemyListInsert(struct Enemy *enemy)
 {
-    if(numberOfEnemiesOnBattle < TOP)
+    if(numberOfEnemiesOnBattle < totalNumberOfEnemiesOnBattle)
     {
         enemyList[rootBlock.next->index] = enemy;
         enemy->indexAtEnemyList = rootBlock.next->index;
@@ -524,7 +520,7 @@ void EnemyListInsert(struct Enemy *enemy)
 
 void EnemyListRemove(int index)
 {
-    if(numberOfEnemiesOnBattle > 0 && index >= 0 && index < TOP)
+    if(numberOfEnemiesOnBattle > 0 && index >= 0 && index < totalNumberOfEnemiesOnBattle)
     {
         struct FreeEnemyBlock *newBlock = (struct FreeEnemyBlock *) malloc(sizeof(struct FreeEnemyBlock));
         newBlock->index = index;
@@ -602,14 +598,14 @@ void EnemyListRemove(int index)
 
 bool EnemyListIsOneLeft()
 {
-    return numberOfEnemiesOnBattle < TOP;
+    return numberOfEnemiesOnBattle < totalNumberOfEnemiesOnBattle;
 }
 
 int EnemyListCheckPositions(int line, int col)
 {
     struct FreeEnemyBlock *iterator = &rootBlock;
     int count = 0;
-    for (int i = 0; i < TOP; i++)
+    for (int i = 0; i < totalNumberOfEnemiesOnBattle; i++)
     {
         if(count < numberOfFreeBlock && i == iterator->next->index)
         {
@@ -630,7 +626,7 @@ int EnemyListCheckPositions(int line, int col)
 void EnemyListEraseAllBlocksFromMemory()
 {
     struct FreeEnemyBlock *iterator = rootBlock.next;
-    for (int i = 0; i < TOP; i++)
+    for (int i = 0; i < totalNumberOfEnemiesOnBattle; i++)
     {
         if(numberOfFreeBlock > 0 && i == iterator->index)
         {
@@ -666,24 +662,87 @@ void getRandomPos(struct Enemy *en)
 
 void screenRefresh()
 {
-    char hp[12], thp[12];
+    char hp[12], thp[12], level[12], totalEnemy[12];
     sprintf(hp, "%d", player.hp);
     sprintf(thp, "%d", player.totalHp);
+    sprintf(level, "%d", playerLevel);
+    sprintf(totalEnemy, "%d", totalEnemiesOnThisLevel);
 
 
     setMotherShip();
+    mvaddstr(0, 3, "Level:");
+    mvaddstr(0, 10, level);
     mvaddstr(0, COLUMNS/2 - 11, "Player HP: ");
     mvaddstr(0, COLUMNS/2, "        ");
     mvaddstr(0, COLUMNS/2, hp);
     mvaddstr(0, COLUMNS/2 + 2, "/");
     mvaddstr(0, COLUMNS/2 + 3,thp);
+    mvaddstr(0, COLUMNS -15, "Enemies: ");
+    mvaddstr(0, COLUMNS - 5, totalEnemy);
     refresh();
+}
+
+void gameStart()
+{
+    do 
+    {
+        clear();
+        refresh();
+        screenOnPause = false;
+        gameClose = false;
+        levelUp = false;
+    
+        // Set Memory for Enemies
+        rootBlock.index = -2;
+        rootBlock.length = -2;
+
+        struct FreeEnemyBlock *initial = (struct FreeEnemyBlock *) malloc(sizeof(struct FreeEnemyBlock));
+        initial->index = 0;
+        initial->length = totalNumberOfEnemiesOnBattle;
+
+        rootBlock.next = initial;
+        numberOfFreeBlock = 1;
+
+        // Set MotherSip
+        setMotherShip();
+        totalEnemiesOnThisLevel = (10 * playerLevel);
+        pthread_t mothership;
+        int ship = pthread_create(&mothership, NULL, createMotherShipThread, NULL);
+        if(ship != 0)
+        {
+            perror("Error al crear el hilo player");
+            return;
+        }
+        
+        // Set Player
+        player.line = ROWS-1;
+        player.col = COLUMNS/2;
+        player.ch = '^';
+        player.hp = player.totalHp = 10 + (playerLevel * 5);
+        pthread_t playerThread;
+        int player = pthread_create(&playerThread, NULL, createPlayerThread, NULL);
+        if(player != 0)
+        {
+            perror("Error al crear el hilo player");
+            return;
+        }
+
+        //screenRefresh();
+
+        pthread_join(playerThread, NULL);
+        pthread_join(mothership, NULL); 
+        EnemyListEraseAllBlocksFromMemory();
+    } while (levelUp);
+    
+
+    
 }
 
 void gameOver(int i)
 {
     clear();
-    mvaddstr(LINES/2 - 1, COLUMNS/2 - 5, "SEE YOU");
+    gameClose = true;
+    levelUp = false;
 
     switch (i)
     {
@@ -695,11 +754,13 @@ void gameOver(int i)
             break;
         case 1:
             mvaddstr(LINES/2 - 1, COLUMNS/2 - 5, "YOU WIN");
+            levelUp = true;
+            playerLevel++;
+            break;
         default:
             break;
     }
 
     refresh();
-    gameClose = true;
     sleep(1);
 }
