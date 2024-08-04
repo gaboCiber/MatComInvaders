@@ -16,6 +16,7 @@ bool screenOnPause = false;
 bool gameClose = false;
 bool levelUp = false;
 int playerLevel = 1;
+bool saveGame;
 
 int getRamdomNumberInterval(int min, int max);
 void getRandomPos(struct Enemy *en);
@@ -59,11 +60,24 @@ int HangarBuild();
 void desingEnemy(struct HangarNode* en);
 void destroyUnbuildEnemies();
 
+// Load and Save Game
+int playerHPSave;
+bool FileSaveEnemyList(const char *fileToWrite);
+void FileWhiteSpaceRemove(char *line);
+bool FileConvertStringToInt(char *str, int *num);
+bool FileLoadEnemyList(const char *fileToRead);
+void FileGetRoute(char *route);
+
 // ------------------------------------------------------------------------------------//
 
-int main() 
+int main(int argc, char *argv[]) 
 {
-    
+    if(argc > 2)
+    {
+        perror("Too many argmuments");
+        return -1;
+    }
+
     srand(time(0));
 
     pthread_mutex_init(&mutex, 0);
@@ -77,6 +91,16 @@ int main()
     
     keypad(stdscr, TRUE);
     curs_set(0);
+
+    if(argc == 2)
+    {
+        FileLoadEnemyList(argv[1]);
+        saveGame = true;
+    }
+    else
+    {
+        saveGame = false;
+    }
 
     gameStart();
 
@@ -266,12 +290,13 @@ void *createMotherShipThread(void *arg)
             
             if(model >= 0)
             {
-                struct EnemyToBield enemy;
-                enemy.shipModel = model;
-                enemy.isOnBattle = false;
+                struct EnemyToBield* toBield = (struct EnemyToBield *) malloc(sizeof(struct EnemyToBield));
+                toBield->col = getRamdomNumberInterval(5, COLUMNS-5);
+                toBield->shipModel = model;
+                toBield->indexAtEnemyList = -1;
                 
                 pthread_t enemyThread;       
-                int en = pthread_create(&enemyThread, &threadDetachedAttr, createEnemyThread, (void *) &enemy);
+                int en = pthread_create(&enemyThread, &threadDetachedAttr, createEnemyThread, (void *) toBield);
                 if(en != 0)
                 {
                     perror("Error al crear el hilo player");
@@ -294,18 +319,12 @@ void *createEnemyThread(void *arg)
 
     // Construction
     struct Enemy *enemy = (struct Enemy *) malloc(sizeof(struct Enemy));
-    
-    if(toBield->isOnBattle)
-    {
-        enemy = enemyList[toBield->indexAtEnemyList];
-    }
-    else
-    {
-        enemy->line = 3;
-        enemy->col = getRamdomNumberInterval(5, COLUMNS-5);
-        enemy->shipModel = toBield->shipModel;
-        EnemyListInsert(enemy);
-    }   
+    enemy->line = toBield->line;
+    enemy->col = toBield->col;
+    enemy->shipModel = toBield->shipModel;
+    enemy->indexAtEnemyList = toBield->indexAtEnemyList;
+    free(toBield);
+    EnemyListInsert(enemy);
     
     switch ( enemy->shipModel )
     {
@@ -495,7 +514,11 @@ void destroyUnbuildEnemies()
 // EnemyList
 void EnemyListInsert(struct Enemy *enemy)
 {
-    if(numberOfEnemiesOnBattle < totalNumberOfEnemiesOnBattle)
+    if(enemy->indexAtEnemyList >= 0 && enemy->indexAtEnemyList < totalNumberOfEnemiesOnBattle)
+    {
+        enemyList[enemy->indexAtEnemyList] = enemy;
+    }
+    else if(numberOfEnemiesOnBattle < totalNumberOfEnemiesOnBattle)
     {
         enemyList[rootBlock.next->index] = enemy;
         enemy->indexAtEnemyList = rootBlock.next->index;
@@ -647,6 +670,225 @@ void EnemyListEraseAllBlocksFromMemory()
 
 }
 
+
+// Load and Save Game
+bool FileSaveEnemyList(const char *fileToWrite)
+{
+    FILE *file = fopen(fileToWrite, "w");
+    if(file == NULL)
+    {
+        printf("Error al crear el archivo\n");
+        return false;
+    }
+
+    fprintf(file, "playerLevel: %d\n", playerLevel); 
+    fprintf(file, "playerHP: %d\n", player.hp);
+    
+    fprintf(file, "numberOfFreeBlock: %d\n", numberOfFreeBlock);
+    struct FreeEnemyBlock *iterator = &rootBlock;
+    for (int i = 0; i <= numberOfFreeBlock; i++)
+    {
+        fprintf(file, "[\n");
+        fprintf(file, "\tindex: %d\n", iterator->index);
+        fprintf(file, "\tlength: %d\n", iterator->length);
+        fprintf(file, "]\n");
+
+        iterator = iterator->next;
+    }
+    
+    fprintf(file, "numberOfEnemiesOnBattle: %d\n",numberOfEnemiesOnBattle);
+    for (int i = 0; i < totalNumberOfEnemiesOnBattle; i++)
+    {
+        if(enemyList[i] != NULL)
+        {
+            fprintf(file, "[\n");
+            fprintf(file, "\tcol: %d\n", enemyList[i]->col);
+            fprintf(file, "\tline: %d\n", enemyList[i]->line);
+            fprintf(file, "\tshipModel: %d\n", enemyList[i]->shipModel);
+            fprintf(file, "\tindexAtEnemyList: %d\n", enemyList[i]->indexAtEnemyList);
+            fprintf(file, "]\n");
+        }
+    }
+
+    fclose(file);
+    return true;
+
+}
+
+void FileWhiteSpaceRemove(char *line)
+{
+    int length = strlen(line);
+    char result[length + 1];
+
+    int j = 0;
+    for (int i = 0; i < length - 1; i++)
+    {
+        if(line[i] != ' ' && line[i] != '\n' && line[i] != '\t')
+            result[j++] = line[i];
+    }
+
+    while (j <= length)
+    {
+        result[j++] = '\0';
+    }
+    
+    strcpy(line, result);
+}
+
+bool FileConvertStringToInt(char *str, int *num)
+{
+    char *endptr;
+    long int number = strtol(str, &endptr, 10);
+
+    if(*endptr == '\0')
+    {
+        *num = (int) number;
+        return true;
+    }
+    
+    return false;
+}
+
+bool FileLoadEnemyList(const char *fileToRead)
+{
+    FILE *file = fopen(fileToRead, "r");
+    if(file == NULL)
+    {
+        printf("Error al crear el archivo\n");
+        return false;
+    }
+
+    char line[100];
+    
+    bool loadingEnemy = false;
+    int realNumberOfEnemies = 0;
+    struct EnemyToBield *toBield;
+
+
+    bool loadingBlock = false;
+    int realNumberOfBlock = 0;
+    struct FreeEnemyBlock *block = NULL, *save = NULL;
+    
+    while(fgets(line, sizeof(line), file) != NULL)
+    {
+        FileWhiteSpaceRemove(line);
+        char  *propertyName, *propertyNumber;
+        
+        propertyName = strtok(line, ":"); 
+        propertyNumber = strtok(NULL, ":");  
+        
+        int num;
+
+
+        if(propertyName == "\n" || propertyName == NULL)
+            continue;
+
+        if(propertyNumber != NULL && !FileConvertStringToInt(propertyNumber, &num))
+            return false;
+
+        
+        if(strcmp(propertyName, "[") == 0)
+        {
+            if(loadingEnemy)
+                toBield = (struct EnemyToBield *) malloc(sizeof(struct EnemyToBield));
+            else if(loadingBlock)
+            {
+                if(save != NULL)
+                {
+                    block = (struct FreeEnemyBlock *) malloc(sizeof(struct FreeEnemyBlock));
+                    save->next = block; 
+                }
+                else
+                    block = &rootBlock;   
+            }
+            else 
+                return false;
+
+            
+            continue;
+        }
+        else if(strcmp(propertyName, "]") == 0)
+        {
+            if(loadingEnemy)
+            {
+                realNumberOfEnemies++;
+                pthread_t enemyThread;       
+                int en = pthread_create(&enemyThread, &threadDetachedAttr, createEnemyThread, (void *) toBield);
+                if(en != 0)
+                {
+                    perror("Error al crear el hilo player");
+                    break;
+                }
+            }
+            else
+            {
+                save = block;
+                realNumberOfBlock++;
+            }
+        }
+        else if(strcmp(propertyName, "playerLevel") == 0)
+        {
+            playerLevel = num;
+        }
+        else if(strcmp(propertyName, "playerHP") == 0)
+        {
+            playerHPSave = num;
+        }
+        else if(strcmp(propertyName, "numberOfEnemiesOnBattle") == 0)
+        {
+            loadingEnemy = true;
+            loadingBlock = false;
+            numberOfEnemiesOnBattle = num;
+        }
+        else if(strcmp(propertyName, "col") == 0 )
+        {
+            toBield->col = num;
+        }
+        else if(strcmp(propertyName, "line") == 0)
+        {
+            toBield->line = num;
+        }
+        else if(strcmp(propertyName, "shipModel") == 0)
+        {
+            toBield->shipModel = num;
+        }
+        else if(strcmp(propertyName, "indexAtEnemyList") == 0)
+        {
+            toBield->indexAtEnemyList = num;
+        }
+        else if(strcmp(propertyName, "numberOfFreeBlock") == 0)
+        {
+            numberOfFreeBlock = num;
+            loadingBlock = true;
+            loadingEnemy = false;
+        }
+        else if(strcmp(propertyName, "index") == 0)
+        {
+            block->index = num;
+        }
+        else if(strcmp(propertyName, "length") == 0)
+        {
+            block->length = num;
+        }
+        else
+        {
+            return false;
+        }
+
+    }
+
+    if(realNumberOfEnemies != numberOfEnemiesOnBattle || realNumberOfBlock != numberOfFreeBlock + 1)
+        return false;
+
+    fclose(file);
+    return true;
+}
+
+void FileGetRoute(char *route)
+{
+
+} 
+
 // General
 int getRamdomNumberInterval(int min, int max)
 {
@@ -692,16 +934,34 @@ void gameStart()
         gameClose = false;
         levelUp = false;
     
+        // Set Player
+        player.line = ROWS-1;
+        player.col = COLUMNS/2;
+        player.ch = '^';
+        player.hp = player.totalHp = (saveGame) ? playerHPSave : 10 + (playerLevel * 5);
+        pthread_t playerThread;
+        int player = pthread_create(&playerThread, NULL, createPlayerThread, NULL);
+        if(player != 0)
+        {
+            perror("Error al crear el hilo player");
+            return;
+        }
+        
         // Set Memory for Enemies
-        rootBlock.index = -2;
-        rootBlock.length = -2;
+        if(!saveGame)
+        {
+            rootBlock.index = -2;
+            rootBlock.length = -2;
 
-        struct FreeEnemyBlock *initial = (struct FreeEnemyBlock *) malloc(sizeof(struct FreeEnemyBlock));
-        initial->index = 0;
-        initial->length = totalNumberOfEnemiesOnBattle;
+            struct FreeEnemyBlock *initial = (struct FreeEnemyBlock *) malloc(sizeof(struct FreeEnemyBlock));
+            initial->index = 0;
+            initial->length = totalNumberOfEnemiesOnBattle;
 
-        rootBlock.next = initial;
-        numberOfFreeBlock = 1;
+            rootBlock.next = initial;
+            numberOfFreeBlock = 1;
+        }
+        
+        saveGame = false;
 
         // Set MotherSip
         setMotherShip();
@@ -709,19 +969,6 @@ void gameStart()
         pthread_t mothership;
         int ship = pthread_create(&mothership, NULL, createMotherShipThread, NULL);
         if(ship != 0)
-        {
-            perror("Error al crear el hilo player");
-            return;
-        }
-        
-        // Set Player
-        player.line = ROWS-1;
-        player.col = COLUMNS/2;
-        player.ch = '^';
-        player.hp = player.totalHp = 10 + (playerLevel * 5);
-        pthread_t playerThread;
-        int player = pthread_create(&playerThread, NULL, createPlayerThread, NULL);
-        if(player != 0)
         {
             perror("Error al crear el hilo player");
             return;
@@ -741,6 +988,8 @@ void gameStart()
 void gameOver(int i)
 {
     clear();
+    refresh();
+
     gameClose = true;
     levelUp = false;
 
@@ -750,6 +999,65 @@ void gameOver(int i)
             mvaddstr(LINES/2 - 1, COLUMNS/2 - 5, "YOU LOSE");
             break;
         case 0:
+            start_color();
+            mvaddstr(LINES/2 - 1, COLUMNS/2 - 13, "Do you want to save the game: ");
+            int input = 0;
+            bool save, first = true;
+            init_pair(1, COLOR_BLACK, COLOR_WHITE);
+            
+            while(input == KEY_ENTER || input != 10)
+            {
+                if(input == KEY_LEFT || first)
+                {
+                    attron(COLOR_PAIR(1));
+                    mvaddstr(LINES/2, COLUMNS/2 - 10, "YES");
+                    attroff(COLOR_PAIR(1));
+                    mvaddstr(LINES/2, COLUMNS/2 + 10, "NO");
+                    save = true;
+                }
+                else if(input == KEY_RIGHT)
+                {
+                    mvaddstr(LINES/2, COLUMNS/2 - 10, "YES");
+                    attron(COLOR_PAIR(1));
+                    mvaddstr(LINES/2, COLUMNS/2 + 10, "NO");
+                    attroff(COLOR_PAIR(1));
+                    save = false;
+                }
+
+                refresh();
+                first = false;
+                input = getch();
+            } 
+
+            if(save)
+            {
+                mvaddstr(LINES/2 + 2, COLUMNS/2 - 13, "Type a name for the file: ");
+                refresh();
+                
+                char name[20];
+                int index = 0;
+                
+                curs_set(1);
+                refresh();
+                while( (input = getch()) == KEY_ENTER || input != 10 || index == 20)
+                {
+                    name[index++] = (char) input; 
+                }
+                
+                if(index < 4 || name[index - 4] != '.' || name[index - 3] != 't' || name[index - 2] != 'x' || name[index - 1] != 't')
+                {
+                    name[index++] = '.';
+                    name[index++] = 't';
+                    name[index++] = 'x';
+                    name[index++] = 't';
+                }
+
+                name[index] = '\0';
+
+                FileSaveEnemyList(name);
+            }
+
+            clear();
             mvaddstr(LINES/2 - 1, COLUMNS/2 - 5, "SEE YOU");
             break;
         case 1:

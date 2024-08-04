@@ -1,0 +1,30 @@
+playerLevel: 1
+playerHP: 11
+numberOfFreeBlock: 1
+[
+	index: -2
+	length: -2
+]
+[
+	index: 3
+	length: 7
+]
+numberOfEnemiesOnBattle: 3
+[
+	col: 38
+	line: 14
+	shipModel: 1
+	indexAtEnemyList: 0
+]
+[
+	col: 78
+	line: 15
+	shipModel: 0
+	indexAtEnemyList: 1
+]
+[
+	col: 110
+	line: 33
+	shipModel: 2
+	indexAtEnemyList: 2
+]
