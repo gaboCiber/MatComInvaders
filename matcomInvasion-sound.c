@@ -11,6 +11,7 @@
 // General
 int COLUMNS, ROWS;
 pthread_mutex_t mutex;
+pthread_mutex_t mutexSound;
 pthread_attr_t threadDetachedAttr;
 bool screenOnPause = false;
 bool gameClose = false;
@@ -29,6 +30,7 @@ void gameStart();
 struct Player player;
 void *createBullet(void *arg);
 void *createPlayerThread(void *arg);
+void *bulletSound(void *arg);
 
 // MotherShip and Enemies 
 void setMotherShip();
@@ -67,6 +69,12 @@ bool FileConvertStringToInt(char *str, int *num);
 bool FileLoadEnemyList(const char *fileToRead);
 void FileGetRoute(char *route);
 
+// Sound
+SDL_AudioSpec wavSpec;
+Uint32 wavLength;
+Uint8 *wavBuffer = NULL;
+SDL_AudioDeviceID deviceId;
+
 // ------------------------------------------------------------------------------------//
 
 int main(int argc, char *argv[]) 
@@ -80,8 +88,10 @@ int main(int argc, char *argv[])
     srand(time(0));
 
     pthread_mutex_init(&mutex, 0);
+    pthread_mutex_init(&mutexSound, 0);
     pthread_attr_init(&threadDetachedAttr);
     pthread_attr_setdetachstate(&threadDetachedAttr, PTHREAD_CREATE_DETACHED);
+    SDL_Init(SDL_INIT_AUDIO);
 
 
     initscr();
@@ -104,7 +114,9 @@ int main(int argc, char *argv[])
 
     gameStart();
 
+    SDL_Quit();
     pthread_mutex_destroy(&mutex);
+    pthread_mutex_destroy(&mutexSound);
     pthread_attr_destroy(&threadDetachedAttr);
 
     endwin();
@@ -143,6 +155,15 @@ void *createPlayerThread(void *arg)
                 perror("Error al crear el hilo bullet");
                 break;
             }
+
+            /*pthread_t soundThread;
+            int sound = pthread_create(&soundThread, &threadDetachedAttr, bulletSound, NULL);
+            if(sound != 0)
+            {
+                perror("Error al crear el hilo bullet");
+                break;
+            }*/
+
         }
         else if(inputKeyBoard == 'p')
         {
@@ -210,6 +231,30 @@ void *createBullet(void *arg)
     
     pthread_exit(NULL);
 }
+
+void *bulletSound(void *arg)
+{
+    pthread_mutex_lock(&mutexSound);
+    
+    SDL_LoadWAV("src/laser-zap-90575.wav", &wavSpec, &wavBuffer, &wavLength);
+    deviceId = SDL_OpenAudioDevice(NULL, 0, &wavSpec, NULL, 0);
+    int success = SDL_QueueAudio(deviceId, wavBuffer, wavLength);
+    SDL_PauseAudioDevice(deviceId, 0);
+    
+    pthread_mutex_unlock(&mutexSound);
+
+    SDL_Delay(2000);
+
+    pthread_mutex_lock(&mutexSound);
+    
+    SDL_CloseAudioDevice(deviceId);
+    SDL_FreeWAV(wavBuffer);
+    
+    pthread_mutex_unlock(&mutexSound);
+
+    pthread_exit(NULL);
+}
+
 
 // MotherShip and Enemies
 

@@ -1,4 +1,5 @@
-playerLevel: 3
+playerLevel: 4
+playerHP: 30
 numberOfFreeBlock: 1
 [
 	index: -2
@@ -10,14 +11,14 @@ numberOfFreeBlock: 1
 ]
 numberOfEnemiesOnBattle: 2
 [
-	col: 28
-	line: 25
+	col: 104
+	line: 11
 	shipModel: 1
 	indexAtEnemyList: 0
 ]
 [
-	col: 61
+	col: 12
 	line: 8
-	shipModel: 1
+	shipModel: 0
 	indexAtEnemyList: 1
 ]

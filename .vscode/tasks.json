@@ -12,6 +12,7 @@
                 "-o",
                 "${fileDirname}/${fileBasenameNoExtension}",
                 "-lncurses",
+                "$(pkg-config --cflags --libs sdl2)"
             ],
             "options": {
                 "cwd": "${fileDirname}"
