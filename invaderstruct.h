@@ -20,9 +20,11 @@ struct Enemy
     int* upDown;
     int* leftRight;
     int upDownCount;
-    int leftRightCount; 
+    int leftRightCount;
+    int movementIndex; 
     int indexAtEnemyList;
     int shipModel;
+    bool moved;
 } ;
 
 struct EnemyToBield

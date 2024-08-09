@@ -24,13 +24,11 @@ void screenRefresh();
 void gameOver(int i);
 void gameStart();
 
-void *createScreenThread(void *arg);
 
 // Player 
 struct Player player;
 void *createBullet(void *arg);
 void *createPlayerThread(void *arg);
-
 
 // MotherShip and Enemies 
 void setMotherShip();
@@ -118,14 +116,10 @@ int main(int argc, char *argv[])
 // Player
 void *createPlayerThread(void *arg)
 {    
-    clock_t bulletFire = clock();
-    clock_t bulletRecall;
-    double elapsedTime;
-
     mvaddch(player.line, player.col,player.ch);
 
     int inputKeyBoard;
-    while((inputKeyBoard = getch()) != KEY_F(4) && inputKeyBoard != ERR && !gameClose)
+    while ((inputKeyBoard = getch()) != KEY_F(4) && inputKeyBoard != ERR && !gameClose)
     {
         if( (inputKeyBoard == KEY_RIGHT || inputKeyBoard == KEY_LEFT) )
         {            
@@ -142,18 +136,12 @@ void *createPlayerThread(void *arg)
         }
         else if(inputKeyBoard == KEY_UP)
         {
-            bulletRecall = clock();
-            elapsedTime = ( (double) bulletRecall - bulletFire );
-            if( elapsedTime >= 5000)
+            pthread_t bulletThread;
+            int bullet = pthread_create(&bulletThread, &threadDetachedAttr, createBullet, NULL);
+            if(bullet != 0)
             {
-                bulletFire = clock();
-                pthread_t bulletThread;
-                int bullet = pthread_create(&bulletThread, &threadDetachedAttr, createBullet, NULL);
-                if(bullet != 0)
-                {
-                    perror("Error al crear el hilo bullet");
-                    break;
-                }
+                perror("Error al crear el hilo bullet");
+                break;
             }
         }
         else if(inputKeyBoard == 'p')
@@ -214,12 +202,12 @@ void *createBullet(void *arg)
         pthread_mutex_unlock(&mutex);
         
         usleep(50000);
-        
+
         mvaddch(bullet.line, bullet.col,' ');
 
         bullet.line--;
     }
-
+    
     pthread_exit(NULL);
 }
 
@@ -306,7 +294,6 @@ void *createEnemyThread(void *arg)
     enemy->col = toBield->col;
     enemy->shipModel = toBield->shipModel;
     enemy->indexAtEnemyList = toBield->indexAtEnemyList;
-    enemy->movementIndex = 0;
     free(toBield);
     EnemyListInsert(enemy);
     
@@ -320,18 +307,18 @@ void *createEnemyThread(void *arg)
             enemy->upDownCount = 1;
             break;
         case 1:
+            enemy->ch = '#';   
+            enemy->leftRight =  (int[3]) {-1, 0 , 1};
+            enemy->leftRightCount = 3;  
+            enemy->upDown = (int[2]) {0 , 1};
+            enemy->upDownCount = 2;
+            break;
+        case 2:
             enemy->ch = '$';   
             enemy->leftRight =  (int[2]) {-2,2};
             enemy->leftRightCount = 2;  
             enemy->upDown = (int[1]) {1};
             enemy->upDownCount = 1;
-            break;
-        case 2:
-            enemy->ch = '#';   
-            enemy->leftRight = (int[3]) {-1, 0, 1};
-            enemy->leftRightCount = 3;  
-            enemy->upDown = (int[2]) {1, 0};
-            enemy->upDownCount = 2;
             break;
         default:
             break;
@@ -344,17 +331,13 @@ void *createEnemyThread(void *arg)
     screenRefresh();
     pthread_mutex_unlock(&mutex);
 
+    bool insideScreen = 1;
+
     while (!gameClose)
     {
-        // if(enemy->moved)
-        //     continue;
-        
         mvaddch(enemy->line, enemy->col,' ');
         
-        enemy->line += enemy->upDown[enemy->movementIndex % enemy->upDownCount];
-        enemy->col += enemy->leftRight[enemy->movementIndex % enemy->leftRightCount];
-        enemy->movementIndex++;
-        //enemy->moved = true;
+        getRandomPos(enemy);
         
         mvaddch(enemy->line, enemy->col,enemy->ch);
         
@@ -877,39 +860,6 @@ void FileGetRoute(char *route)
 
 } 
 
-// Screen
-void *createScreenThread(void *arg)
-{
-    bool allMoved;
-    int enemyIndex = 0;
-    while (!gameClose)
-    {
-        allMoved = true;
-        
-        for (int i = 0; i < totalNumberOfEnemiesOnBattle; i++)
-            if(enemyList[enemyIndex] != NULL)
-                if(!enemyList[enemyIndex]->moved)
-                    allMoved = false;
-        
-        if(allMoved)
-        {
-            for (int i = 0; i < totalNumberOfEnemiesOnBattle; i++)
-                if(enemyList[enemyIndex] != NULL)
-                    enemyList[enemyIndex]->moved = false;
-            
-            pthread_mutex_lock(&mutex);
-            screenRefresh();
-            pthread_mutex_unlock(&mutex);
-
-        }
-        
-    }
-    
-    pthread_exit(NULL);
-}
-
-
-
 // General
 int getRamdomNumberInterval(int min, int max)
 {
@@ -994,6 +944,8 @@ void gameStart()
             perror("Error al crear el hilo player");
             return;
         }
+
+        //screenRefresh();
 
         pthread_join(playerThread, NULL);
         pthread_join(mothership, NULL); 
