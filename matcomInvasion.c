@@ -1123,7 +1123,7 @@ void* playBackgroundSound(void* arg) {
     
     while (!gameClose)
     {
-        SDL_RWops* rw = SDL_RWFromMem(backsound_cut_mp3,  backsound_cut_mp3_len);  // Usa el tamaño correcto
+        SDL_RWops* rw = SDL_RWFromMem(backsound_cut_mp3,  backsound_cut_mp3_len);
         Mix_Chunk *sound = Mix_LoadWAV_RW(rw, 1);
    
         if (!sound) {
@@ -1144,7 +1144,7 @@ void* playBackgroundSound(void* arg) {
 
 void* playBulletSound(void * arg)
 {
-    SDL_RWops* rw = SDL_RWFromMem(laser_wav, laser_wav_len);  // Usa el tamaño correcto
+    SDL_RWops* rw = SDL_RWFromMem(laser_wav, laser_wav_len);
     Mix_Chunk *sound = Mix_LoadWAV_RW(rw, 1);
     
     if (!sound) {
