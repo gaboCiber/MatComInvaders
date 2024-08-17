@@ -7,8 +7,8 @@
 #include "stdbool.h"
 #include <SDL2/SDL.h>
 #include <SDL2/SDL_mixer.h>
-#include "src/backgroundSound.h"
-#include "src/laser.h"
+#include "audio/backgroundSound.h"
+#include "audio/laser.h"
 
 
 // General
