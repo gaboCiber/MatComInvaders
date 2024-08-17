@@ -3,6 +3,7 @@
         "curses.h": "c",
         "pthread.h": "c",
         "invaderstruct.h": "c",
-        "ncurses.h": "c"
+        "ncurses.h": "c",
+        "sdl.h": "c"
     }
 }

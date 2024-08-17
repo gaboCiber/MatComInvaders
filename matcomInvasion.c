@@ -6,6 +6,9 @@
 #include "invaderstruct.h"
 #include "stdbool.h"
 #include <SDL2/SDL.h>
+#include <SDL2/SDL_mixer.h>
+#include "src/backgroundSound.h"
+#include "src/laser.h"
 
 
 // General
@@ -19,12 +22,9 @@ int playerLevel = 1;
 bool saveGame;
 
 int getRamdomNumberInterval(int min, int max);
-void getRandomPos(struct Enemy *en);
 void screenRefresh();
 void gameOver(int i);
 void gameStart();
-
-void *createScreenThread(void *arg);
 
 // Player 
 struct Player player;
@@ -68,8 +68,17 @@ void FileWhiteSpaceRemove(char *line);
 bool FileConvertStringToInt(char *str, int *num);
 bool FileLoadEnemyList(const char *fileToRead);
 void FileGetRoute(char *route);
+void SaveGame();
+
+// Sound
+int chanel;
+void* playBulletSound(void * arg);
+void* playBackgroundSound(void* arg);
+
 
 // ------------------------------------------------------------------------------------//
+
+//General
 
 int main(int argc, char *argv[]) 
 {
@@ -104,6 +113,17 @@ int main(int argc, char *argv[])
         saveGame = false;
     }
 
+     if (SDL_Init(SDL_INIT_AUDIO) < 0) {
+        printf("Error initializing SDL: %s\n", SDL_GetError());
+        return -1;
+    }
+
+    if (Mix_OpenAudio(44100, MIX_DEFAULT_FORMAT, 2, 2048) < 0) {
+        printf("Error initializing SDL_mixer: %s\n", Mix_GetError());
+        return -1;
+    }
+
+
     gameStart();
 
     pthread_mutex_destroy(&mutex);
@@ -113,9 +133,134 @@ int main(int argc, char *argv[])
     return 0;
 }
 
-// ------------------------------------------------------------------------------------//
+int getRamdomNumberInterval(int min, int max)
+{
+    return min + rand() % (max + 1 - min);
+}
+
+void screenRefresh()
+{
+    char hp[12], thp[12], level[12], totalEnemy[12];
+    sprintf(hp, "%d", player.hp);
+    sprintf(thp, "%d", player.totalHp);
+    sprintf(level, "%d", playerLevel);
+    sprintf(totalEnemy, "%d", totalEnemiesOnThisLevel);
+
+
+    setMotherShip();
+    mvaddstr(0, 3, "Level:");
+    mvaddstr(0, 10, level);
+    mvaddstr(0, COLUMNS/2 - 11, "Player HP: ");
+    mvaddstr(0, COLUMNS/2, "        ");
+    mvaddstr(0, COLUMNS/2, hp);
+    mvaddstr(0, COLUMNS/2 + 2, "/");
+    mvaddstr(0, COLUMNS/2 + 3,thp);
+    mvaddstr(0, COLUMNS -15, "Enemies: ");
+    mvaddstr(0, COLUMNS - 5, totalEnemy);
+    refresh();
+}
+
+void gameStart()
+{
+    do 
+    {
+        clear();
+        refresh();
+        screenOnPause = false;
+        gameClose = false;
+        levelUp = false;
+    
+        // Set Player
+        player.line = ROWS-1;
+        player.col = COLUMNS/2;
+        player.ch = '^';
+        player.hp = player.totalHp = (saveGame) ? playerHPSave : 10 + (playerLevel * 5);
+        pthread_t playerThread;
+        int player = pthread_create(&playerThread, NULL, createPlayerThread, NULL);
+        if(player != 0)
+        {
+            perror("Error al crear el hilo player");
+            return;
+        }
+        
+        // Set Memory for Enemies
+        if(!saveGame)
+        {
+            rootBlock.index = -2;
+            rootBlock.length = -2;
+
+            struct FreeEnemyBlock *initial = (struct FreeEnemyBlock *) malloc(sizeof(struct FreeEnemyBlock));
+            initial->index = 0;
+            initial->length = totalNumberOfEnemiesOnBattle;
+
+            rootBlock.next = initial;
+            numberOfFreeBlock = 1;
+        }
+        
+        saveGame = false;
+
+        // Set MotherSip
+        setMotherShip();
+        totalEnemiesOnThisLevel = (10 * playerLevel);
+        pthread_t mothershipThread;
+        int ship = pthread_create(&mothershipThread, NULL, createMotherShipThread, NULL);
+        if(ship != 0)
+        {
+            perror("Error al crear el hilo motherShip");
+            return;
+        }
+
+        pthread_t soundThread;
+        int sound = pthread_create(&soundThread, NULL, playBackgroundSound, NULL );
+        if(sound != 0)
+        {
+            perror("Error al crear el hilo sound");
+            return;
+        }
+
+        pthread_join(playerThread, NULL);
+        pthread_join(mothershipThread, NULL); 
+        pthread_join(soundThread, NULL); 
+        EnemyListEraseAllBlocksFromMemory();
+    } while (levelUp);
+    
+
+    
+}
+
+void gameOver(int i)
+{
+    clear();
+    refresh();
+
+    gameClose = true;
+    levelUp = false;
+
+    switch (i)
+    {
+        case -1:
+            mvaddstr(LINES/2 - 1, COLUMNS/2 - 5, "YOU LOSE");
+            break;
+        case 0:
+            SaveGame();
+            clear();
+            mvaddstr(LINES/2 - 1, COLUMNS/2 - 5, "SEE YOU");
+            break;
+        case 1:
+            mvaddstr(LINES/2 - 1, COLUMNS/2 - 5, "YOU WIN");
+            levelUp = true;
+            playerLevel++;
+            break;
+        default:
+            break;
+    }
+
+    refresh();
+    sleep(1);
+}
 
 // Player
+
 void *createPlayerThread(void *arg)
 {    
     clock_t bulletFire = clock();
@@ -147,11 +292,19 @@ void *createPlayerThread(void *arg)
             if( elapsedTime >= 5000)
             {
                 bulletFire = clock();
-                pthread_t bulletThread;
+                pthread_t bulletThread, bulletSound;
+                
                 int bullet = pthread_create(&bulletThread, &threadDetachedAttr, createBullet, NULL);
                 if(bullet != 0)
                 {
                     perror("Error al crear el hilo bullet");
+                    break;
+                }
+
+                int sound = pthread_create(&bulletSound, &threadDetachedAttr, playBulletSound, NULL);
+                if(sound != 0)
+                {
+                    perror("Error al crear el hilo sound");
                     break;
                 }
             }
@@ -346,15 +499,11 @@ void *createEnemyThread(void *arg)
 
     while (!gameClose)
     {
-        // if(enemy->moved)
-        //     continue;
         
         mvaddch(enemy->line, enemy->col,' ');
-        
         enemy->line += enemy->upDown[enemy->movementIndex % enemy->upDownCount];
         enemy->col += enemy->leftRight[enemy->movementIndex % enemy->leftRightCount];
         enemy->movementIndex++;
-        //enemy->moved = true;
         
         mvaddch(enemy->line, enemy->col,enemy->ch);
         
@@ -401,6 +550,7 @@ void *createEnemyThread(void *arg)
 }
 
 // Hangar
+
 void HangarInsert(struct HangarNode *newEnemy)
 {
     struct HangarNode *iterator = &hangarRoot;
@@ -877,217 +1027,135 @@ void FileGetRoute(char *route)
 
 } 
 
-// Screen
-void *createScreenThread(void *arg)
+void SaveGame()
 {
-    bool allMoved;
-    int enemyIndex = 0;
-    while (!gameClose)
+    start_color();
+    mvaddstr(LINES/2 - 1, COLUMNS/2 - 13, "Do you want to save the game: ");
+    int input = 0;
+    bool save, first = true;
+    init_pair(1, COLOR_BLACK, COLOR_WHITE);
+    
+    while(input == KEY_ENTER || input != 10)
     {
-        allMoved = true;
-        
-        for (int i = 0; i < totalNumberOfEnemiesOnBattle; i++)
-            if(enemyList[enemyIndex] != NULL)
-                if(!enemyList[enemyIndex]->moved)
-                    allMoved = false;
-        
-        if(allMoved)
+        if(input == KEY_LEFT || first)
         {
-            for (int i = 0; i < totalNumberOfEnemiesOnBattle; i++)
-                if(enemyList[enemyIndex] != NULL)
-                    enemyList[enemyIndex]->moved = false;
-            
-            pthread_mutex_lock(&mutex);
-            screenRefresh();
-            pthread_mutex_unlock(&mutex);
+            attron(COLOR_PAIR(1));
+            mvaddstr(LINES/2, COLUMNS/2 - 10, "YES");
+            attroff(COLOR_PAIR(1));
+            mvaddstr(LINES/2, COLUMNS/2 + 10, "NO");
+            save = true;
+        }
+        else if(input == KEY_RIGHT)
+        {
+            mvaddstr(LINES/2, COLUMNS/2 - 10, "YES");
+            attron(COLOR_PAIR(1));
+            mvaddstr(LINES/2, COLUMNS/2 + 10, "NO");
+            attroff(COLOR_PAIR(1));
+            save = false;
+        }
 
+        refresh();
+        first = false;
+        input = getch();
+    } 
+
+    if(save)
+    {
+        int actualLine = LINES/2 + 2;
+
+        mvaddstr(actualLine, COLUMNS/2 - 20, "Type a name for the file (max 15 char): ");
+        refresh();
+        
+        char name[20];
+        int index = 0;
+        int actualColumn = COLUMNS/2 - 20 + 40;
+    
+        curs_set(1);
+        refresh();
+        while(true)
+        {           
+            input = getch();
+
+            if(input == 10)
+            {
+                if(index == 0)
+                    move(actualLine, actualColumn);
+                else
+                    break;
+            }
+            else if(input == KEY_BACKSPACE)
+            {
+                if(index > 0)
+                    index--;
+                else
+                    move(actualLine, actualColumn);
+                    
+                addch(' ');
+                move(actualLine, actualColumn + index);
+            }
+            else if(index >= 15)
+            {
+                //addch(' ');
+                move(actualLine, actualColumn + 15);
+                addch(' ');
+                move(actualLine, actualColumn + 15);
+            }
+            else
+                name[index++] = (char) input; 
         }
         
+        if(index < 4 || name[index - 4] != '.' || name[index - 3] != 't' || name[index - 2] != 'x' || name[index - 1] != 't')
+        {
+            name[index++] = '.';
+            name[index++] = 't';
+            name[index++] = 'x';
+            name[index++] = 't';
+        }
+
+        name[index] = '\0';
+
+        FileSaveEnemyList(name);
+    }
+}
+
+// Sound
+void* playBackgroundSound(void* arg) {
+    
+    while (!gameClose)
+    {
+        SDL_RWops* rw = SDL_RWFromMem(backsound_cut_mp3,  backsound_cut_mp3_len);  // Usa el tamaño correcto
+        Mix_Chunk *sound = Mix_LoadWAV_RW(rw, 1);
+   
+        if (!sound) {
+            printf("Error loading sound: %s\n", Mix_GetError());
+            return NULL;
+        }
+        chanel = Mix_PlayChannel(-1, sound, 0);
+        
+        while(!gameClose)
+            SDL_Delay(100);
+        
+        Mix_HaltChannel(chanel);
+        Mix_FreeChunk(sound);
     }
     
     pthread_exit(NULL);
 }
 
-
-
-// General
-int getRamdomNumberInterval(int min, int max)
+void* playBulletSound(void * arg)
 {
-    return min + rand() % (max + 1 - min);
-}
-
-void getRandomPos(struct Enemy *en)
-{
-    int random = rand();
-    en->col += *(en->leftRight + (rand() % en->leftRightCount));
-    en->line += *(en->upDown + (rand() % en->upDownCount));
-}
-
-void screenRefresh()
-{
-    char hp[12], thp[12], level[12], totalEnemy[12];
-    sprintf(hp, "%d", player.hp);
-    sprintf(thp, "%d", player.totalHp);
-    sprintf(level, "%d", playerLevel);
-    sprintf(totalEnemy, "%d", totalEnemiesOnThisLevel);
-
-
-    setMotherShip();
-    mvaddstr(0, 3, "Level:");
-    mvaddstr(0, 10, level);
-    mvaddstr(0, COLUMNS/2 - 11, "Player HP: ");
-    mvaddstr(0, COLUMNS/2, "        ");
-    mvaddstr(0, COLUMNS/2, hp);
-    mvaddstr(0, COLUMNS/2 + 2, "/");
-    mvaddstr(0, COLUMNS/2 + 3,thp);
-    mvaddstr(0, COLUMNS -15, "Enemies: ");
-    mvaddstr(0, COLUMNS - 5, totalEnemy);
-    refresh();
-}
-
-void gameStart()
-{
-    do 
-    {
-        clear();
-        refresh();
-        screenOnPause = false;
-        gameClose = false;
-        levelUp = false;
+    SDL_RWops* rw = SDL_RWFromMem(laser_wav, laser_wav_len);  // Usa el tamaño correcto
+    Mix_Chunk *sound = Mix_LoadWAV_RW(rw, 1);
     
-        // Set Player
-        player.line = ROWS-1;
-        player.col = COLUMNS/2;
-        player.ch = '^';
-        player.hp = player.totalHp = (saveGame) ? playerHPSave : 10 + (playerLevel * 5);
-        pthread_t playerThread;
-        int player = pthread_create(&playerThread, NULL, createPlayerThread, NULL);
-        if(player != 0)
-        {
-            perror("Error al crear el hilo player");
-            return;
-        }
-        
-        // Set Memory for Enemies
-        if(!saveGame)
-        {
-            rootBlock.index = -2;
-            rootBlock.length = -2;
-
-            struct FreeEnemyBlock *initial = (struct FreeEnemyBlock *) malloc(sizeof(struct FreeEnemyBlock));
-            initial->index = 0;
-            initial->length = totalNumberOfEnemiesOnBattle;
-
-            rootBlock.next = initial;
-            numberOfFreeBlock = 1;
-        }
-        
-        saveGame = false;
-
-        // Set MotherSip
-        setMotherShip();
-        totalEnemiesOnThisLevel = (10 * playerLevel);
-        pthread_t mothership;
-        int ship = pthread_create(&mothership, NULL, createMotherShipThread, NULL);
-        if(ship != 0)
-        {
-            perror("Error al crear el hilo player");
-            return;
-        }
-
-        pthread_join(playerThread, NULL);
-        pthread_join(mothership, NULL); 
-        EnemyListEraseAllBlocksFromMemory();
-    } while (levelUp);
-    
-
-    
-}
-
-void gameOver(int i)
-{
-    clear();
-    refresh();
-
-    gameClose = true;
-    levelUp = false;
-
-    switch (i)
-    {
-        case -1:
-            mvaddstr(LINES/2 - 1, COLUMNS/2 - 5, "YOU LOSE");
-            break;
-        case 0:
-            start_color();
-            mvaddstr(LINES/2 - 1, COLUMNS/2 - 13, "Do you want to save the game: ");
-            int input = 0;
-            bool save, first = true;
-            init_pair(1, COLOR_BLACK, COLOR_WHITE);
-            
-            while(input == KEY_ENTER || input != 10)
-            {
-                if(input == KEY_LEFT || first)
-                {
-                    attron(COLOR_PAIR(1));
-                    mvaddstr(LINES/2, COLUMNS/2 - 10, "YES");
-                    attroff(COLOR_PAIR(1));
-                    mvaddstr(LINES/2, COLUMNS/2 + 10, "NO");
-                    save = true;
-                }
-                else if(input == KEY_RIGHT)
-                {
-                    mvaddstr(LINES/2, COLUMNS/2 - 10, "YES");
-                    attron(COLOR_PAIR(1));
-                    mvaddstr(LINES/2, COLUMNS/2 + 10, "NO");
-                    attroff(COLOR_PAIR(1));
-                    save = false;
-                }
-
-                refresh();
-                first = false;
-                input = getch();
-            } 
-
-            if(save)
-            {
-                mvaddstr(LINES/2 + 2, COLUMNS/2 - 13, "Type a name for the file: ");
-                refresh();
-                
-                char name[20];
-                int index = 0;
-                
-                curs_set(1);
-                refresh();
-                while( (input = getch()) == KEY_ENTER || input != 10 || index == 20)
-                {
-                    name[index++] = (char) input; 
-                }
-                
-                if(index < 4 || name[index - 4] != '.' || name[index - 3] != 't' || name[index - 2] != 'x' || name[index - 1] != 't')
-                {
-                    name[index++] = '.';
-                    name[index++] = 't';
-                    name[index++] = 'x';
-                    name[index++] = 't';
-                }
-
-                name[index] = '\0';
-
-                FileSaveEnemyList(name);
-            }
-
-            clear();
-            mvaddstr(LINES/2 - 1, COLUMNS/2 - 5, "SEE YOU");
-            break;
-        case 1:
-            mvaddstr(LINES/2 - 1, COLUMNS/2 - 5, "YOU WIN");
-            levelUp = true;
-            playerLevel++;
-            break;
-        default:
-            break;
+    if (!sound) {
+        printf("Error loading sound: %s\n", Mix_GetError());
+        return NULL;
     }
+    
+    Mix_PlayChannel(-1, sound, 0);
+    
+    SDL_Delay(4000);
+    Mix_FreeChunk(sound);
 
-    refresh();
-    sleep(1);
+    pthread_exit(NULL);
 }

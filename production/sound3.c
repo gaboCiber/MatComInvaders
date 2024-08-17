@@ -1,8 +1,9 @@
 #include <SDL2/SDL.h>
 #include <SDL2/SDL_mixer.h>
 #include <pthread.h>
-#include "../src/audio1.h"
-#include "../src/audio2.h"
+#include "../src/backgroundSound.h"
+#include "../src/bulletSound.h"
+
 
 void* playSound(void* arg) {
     unsigned char* audio_data = (unsigned char*)arg;

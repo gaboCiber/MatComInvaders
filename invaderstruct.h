@@ -24,7 +24,6 @@ struct Enemy
     int movementIndex; 
     int indexAtEnemyList;
     int shipModel;
-    bool moved;
 } ;
 
 struct EnemyToBield
