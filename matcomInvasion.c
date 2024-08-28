@@ -69,6 +69,7 @@ bool FileConvertStringToInt(char *str, int *num);
 bool FileLoadEnemyList(const char *fileToRead);
 void FileGetRoute(char *route);
 void SaveGame();
+int TypeOnScreen(int actualLine, int actualColumn, char *type, int typeLength);
 
 // Sound
 int chanel;
@@ -1022,13 +1023,13 @@ bool FileLoadEnemyList(const char *fileToRead)
     return true;
 }
 
-void FileGetRoute(char *route)
-{
-
-} 
-
 void SaveGame()
 {
+
+    
+    move(0,0);
+    wclear(stdscr);
+
     start_color();
     mvaddstr(LINES/2 - 1, COLUMNS/2 - 13, "Do you want to save the game: ");
     int input = 0;
@@ -1061,49 +1062,17 @@ void SaveGame()
 
     if(save)
     {
-        int actualLine = LINES/2 + 2;
+        curs_set(1);
 
+        // File Name
+        int actualLine = LINES/2 + 2;
         mvaddstr(actualLine, COLUMNS/2 - 20, "Type a name for the file (max 15 char): ");
-        refresh();
         
         char name[20];
-        int index = 0;
         int actualColumn = COLUMNS/2 - 20 + 40;
     
-        curs_set(1);
         refresh();
-        while(true)
-        {           
-            input = getch();
-
-            if(input == 10)
-            {
-                if(index == 0)
-                    move(actualLine, actualColumn);
-                else
-                    break;
-            }
-            else if(input == KEY_BACKSPACE)
-            {
-                if(index > 0)
-                    index--;
-                else
-                    move(actualLine, actualColumn);
-                    
-                addch(' ');
-                move(actualLine, actualColumn + index);
-            }
-            else if(index >= 15)
-            {
-                //addch(' ');
-                move(actualLine, actualColumn + 15);
-                addch(' ');
-                move(actualLine, actualColumn + 15);
-            }
-            else
-                name[index++] = (char) input; 
-        }
-        
+        int index = TypeOnScreen(actualLine, actualColumn, name, 15);  
         if(index < 4 || name[index - 4] != '.' || name[index - 3] != 't' || name[index - 2] != 'x' || name[index - 1] != 't')
         {
             name[index++] = '.';
@@ -1111,11 +1080,84 @@ void SaveGame()
             name[index++] = 'x';
             name[index++] = 't';
         }
-
         name[index] = '\0';
 
-        FileSaveEnemyList(name);
+
+        // File Route
+        actualLine++;
+        char route[55];
+        while (true)
+        {
+            mvaddstr(actualLine, COLUMNS/2 - 20, "Type the route for the file (max 50 char): ");
+            int actualColumn = COLUMNS/2 - 20 + 42;
+
+            refresh();
+            index = TypeOnScreen(actualLine, actualColumn, route, 50);  
+            route[index] = '\0';
+
+            if(access(route, F_OK) != -1)
+                break;
+            
+            mvaddstr(actualLine + 1,COLUMNS/2 - 5, "Wrong route");
+            refresh();
+    
+            sleep(1);
+
+            move(actualLine + 1, 0);
+            wclrtoeol(stdscr);
+            move(actualLine, actualColumn);
+            wclrtoeol(stdscr);
+        }
+        
+        if(route[index - 1] != '/')
+        {
+            route[index++] = '/';   
+            route[index] = '\0';
+        }
+
+        strcat(route, name);
+        FileSaveEnemyList(route);
     }
+}
+
+
+int TypeOnScreen(int actualLine, int actualColumn, char *type, int typeLength)
+{
+    int input;
+    int index = 0;
+    while(true)
+    {           
+        input = getch();
+
+        if(input == 10)
+        {
+            if(index == 0)
+                move(actualLine, actualColumn);
+            else
+                break;
+        }
+        else if(input == KEY_BACKSPACE)
+        {
+            if(index > 0)
+                index--;
+            else
+                move(actualLine, actualColumn);
+                
+            addch(' ');
+            move(actualLine, actualColumn + index);
+        }
+        else if(index >= 15)
+        {
+            //addch(' ');
+            move(actualLine, actualColumn + typeLength);
+            addch(' ');
+            move(actualLine, actualColumn + typeLength);
+        }
+        else
+            type[index++] = (char) input; 
+    }
+
+    return index;
 }
 
 // Sound
