@@ -11,7 +11,9 @@
                 "${file}",
                 "-o",
                 "${fileDirname}/${fileBasenameNoExtension}",
-                "-lncurses"//"$(pkg-config --cflags --libs sdl2)"
+                "-lncurses",
+                "-lSDL2_mixer", "-lSDL2", "-D_REENTRANT", "-I/usr/include/SDL2"
+                //"$(pkg-config --cflags --libs sdl2 SDL2_mixer)"
             ],
             "options": {
                 "cwd": "${fileDirname}"

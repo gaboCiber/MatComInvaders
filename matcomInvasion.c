@@ -26,6 +26,12 @@ void screenRefresh();
 void gameOver(int i);
 void gameStart();
 
+// Start Screen
+void startScreen();
+void drawMatCom(int x, int y);
+void drawSpaceship(int x, int y);
+void drawAlien(int x, int y);
+
 // Player 
 struct Player player;
 void *createBullet(void *arg);
@@ -33,7 +39,7 @@ void *createPlayerThread(void *arg);
 
 
 // MotherShip and Enemies 
-void setMotherShip();
+void drawMotherShip();
 void *createMotherShipThread(void *arg);
 void *createEnemyThread(void *arg);
 
@@ -67,8 +73,8 @@ bool FileSaveEnemyList(const char *fileToWrite);
 void FileWhiteSpaceRemove(char *line);
 bool FileConvertStringToInt(char *str, int *num);
 bool FileLoadEnemyList(const char *fileToRead);
-void FileGetRoute(char *route);
-void SaveGame();
+int FileGetRoute(int actualLine, char *route);
+void FileSaveGame();
 int TypeOnScreen(int actualLine, int actualColumn, char *type, int typeLength);
 
 // Sound
@@ -83,7 +89,7 @@ void* playBackgroundSound(void* arg);
 
 int main(int argc, char *argv[]) 
 {
-    if(argc > 2)
+    if(argc > 1)
     {
         perror("Too many argmuments");
         return -1;
@@ -103,18 +109,20 @@ int main(int argc, char *argv[])
     
     keypad(stdscr, TRUE);
     curs_set(0);
+    start_color();
+    init_pair(1, COLOR_BLACK, COLOR_WHITE);
 
-    if(argc == 2)
-    {
-        FileLoadEnemyList(argv[1]);
-        saveGame = true;
-    }
-    else
-    {
-        saveGame = false;
-    }
+    // if(argc == 2)
+    // {
+    //     FileLoadEnemyList(argv[1]);
+    //     saveGame = true;
+    // }
+    // else
+    // {
+    //     saveGame = false;
+    // }
 
-     if (SDL_Init(SDL_INIT_AUDIO) < 0) {
+    if (SDL_Init(SDL_INIT_AUDIO) < 0) {
         printf("Error initializing SDL: %s\n", SDL_GetError());
         return -1;
     }
@@ -124,7 +132,7 @@ int main(int argc, char *argv[])
         return -1;
     }
 
-
+    startScreen();
     gameStart();
 
     pthread_mutex_destroy(&mutex);
@@ -148,7 +156,7 @@ void screenRefresh()
     sprintf(totalEnemy, "%d", totalEnemiesOnThisLevel);
 
 
-    setMotherShip();
+    drawMotherShip();
     mvaddstr(0, 3, "Level:");
     mvaddstr(0, 10, level);
     mvaddstr(0, COLUMNS/2 - 11, "Player HP: ");
@@ -201,7 +209,7 @@ void gameStart()
         saveGame = false;
 
         // Set MotherSip
-        setMotherShip();
+        drawMotherShip();
         totalEnemiesOnThisLevel = (10 * playerLevel);
         pthread_t mothershipThread;
         int ship = pthread_create(&mothershipThread, NULL, createMotherShipThread, NULL);
@@ -243,7 +251,7 @@ void gameOver(int i)
             mvaddstr(LINES/2 - 1, COLUMNS/2 - 5, "YOU LOSE");
             break;
         case 0:
-            SaveGame();
+            FileSaveGame();
             clear();
             mvaddstr(LINES/2 - 1, COLUMNS/2 - 5, "SEE YOU");
             break;
@@ -258,6 +266,91 @@ void gameOver(int i)
 
     refresh();
     sleep(1);
+}
+
+
+// Start Screen
+void startScreen()
+{
+    drawSpaceship(5, ROWS / 2 - 9);
+    drawMatCom(COLUMNS / 2 - 30, ROWS / 2 - 10);
+    drawAlien(COLUMNS - 20, ROWS / 2 - 8);
+    refresh();
+
+    int input = 0;
+    bool save, first = true;
+    
+    while(input == KEY_ENTER || input != 10)
+    {
+        if(input == KEY_LEFT || first)
+        {
+            attron(COLOR_PAIR(1));
+            mvaddstr(ROWS/2 + 10, COLUMNS/2 - 10, "PLAY");
+            attroff(COLOR_PAIR(1));
+            mvaddstr(ROWS/2 + 10, COLUMNS/2 + 10, "LOAD");
+            saveGame = false;
+        }
+        else if(input == KEY_RIGHT)
+        {
+            mvaddstr(ROWS/2 + 10, COLUMNS/2 - 10, "PLAY");
+            attron(COLOR_PAIR(1));
+            mvaddstr(ROWS/2 + 10, COLUMNS/2 + 10, "LOAD");
+            attroff(COLOR_PAIR(1));
+            saveGame = true;
+        }
+
+        refresh();
+        first = false;
+ 
+        input = getch();
+    }
+
+    if(saveGame)
+    {
+        curs_set(1);
+        char route[55];
+        FileGetRoute(ROWS/2 + 12, route);
+        FileLoadEnemyList(route);
+        saveGame = true;
+        curs_set(0);
+    }
+    
+}
+
+void drawMatCom(int x, int y) {
+    mvprintw(y, x, "      __  __      _    _____  ____  _____   __  __");
+    mvprintw(y + 1, x, "     |  \\/  |    / \\  |_   _|/ ___ /  _  \\ |  \\/  |");
+    mvprintw(y + 2, x, "     | |\\/| |   / _ \\   | |  | |   | | | | | |\\/| |");
+    mvprintw(y + 3, x, "     | |  | |  / ___ \\  | |  | |__ | |_| | | |  | |");
+    mvprintw(y + 4, x, "     |_|  |_| /_/   \\_\\ |_|  \\____ \\_____/ |_|  |_|");
+    mvprintw(y + 5, x, "                                                            ");
+    mvprintw(y + 6, x, " ___   _   _ __       __  _     _____   ___   _____   _   _");
+    mvprintw(y + 7, x, "|_ _| | \\ | |\\ \\     / / / \\   / ____| |_ _| /  _  \\ | \\ | |");
+    mvprintw(y + 8, x, " | |  |  \\| | \\ \\   / / / _ \\  |(___    | |  | | | | |  \\| |");
+    mvprintw(y + 9, x, " | |  | |\\  |  \\ \\_/ / / ___ \\  ____)|  | |  | |_| | | |\\  | ");
+   mvprintw(y + 10, x, "|___| |_| \\_|   \\___/ / /   \\_\\|_____/ |___| \\_____/ |_| \\_| ");
+}
+
+void drawSpaceship(int x, int y) {
+    mvprintw(y, x, "     /\\");
+    mvprintw(y + 1, x, "    /  \\");
+    mvprintw(y + 2, x, "   /____\\");
+    mvprintw(y + 3, x, "  |      |");
+    mvprintw(y + 4, x, "  |  __  |");
+    mvprintw(y + 5, x, "  | |  | |");
+    mvprintw(y + 6, x, "  | |__| |");
+    mvprintw(y + 7, x, "  |______|");
+    mvprintw(y + 8, x, " /|      |\\");
+    mvprintw(y + 9, x, "/_|______|_\\");
+}
+
+void drawAlien(int x, int y) {
+    mvprintw(y, x, "   _____ ");
+    mvprintw(y + 1, x, "  /     \\");
+    mvprintw(y + 2, x, " | () () |");
+    mvprintw(y + 3, x, "  \\  ^  /");
+    mvprintw(y + 4, x, "   |||||");
+    mvprintw(y + 5, x, "   |||||");
 }
 
 // Player
@@ -323,7 +416,7 @@ void *createPlayerThread(void *arg)
             getch();
             
             clear();
-            setMotherShip();
+            drawMotherShip();
             screenOnPause = false;
             refresh();
             
@@ -379,7 +472,7 @@ void *createBullet(void *arg)
 
 // MotherShip and Enemies
 
-void setMotherShip()
+void drawMotherShip()
 {
     mvaddch(0,0,'\\');
     
@@ -1023,18 +1116,14 @@ bool FileLoadEnemyList(const char *fileToRead)
     return true;
 }
 
-void SaveGame()
-{
-
-    
+void FileSaveGame()
+{ 
     move(0,0);
     wclear(stdscr);
 
-    start_color();
     mvaddstr(LINES/2 - 1, COLUMNS/2 - 13, "Do you want to save the game: ");
     int input = 0;
     bool save, first = true;
-    init_pair(1, COLOR_BLACK, COLOR_WHITE);
     
     while(input == KEY_ENTER || input != 10)
     {
@@ -1086,28 +1175,7 @@ void SaveGame()
         // File Route
         actualLine++;
         char route[55];
-        while (true)
-        {
-            mvaddstr(actualLine, COLUMNS/2 - 20, "Type the route for the file (max 50 char): ");
-            int actualColumn = COLUMNS/2 - 20 + 42;
-
-            refresh();
-            index = TypeOnScreen(actualLine, actualColumn, route, 50);  
-            route[index] = '\0';
-
-            if(access(route, F_OK) != -1)
-                break;
-            
-            mvaddstr(actualLine + 1,COLUMNS/2 - 5, "Wrong route");
-            refresh();
-    
-            sleep(1);
-
-            move(actualLine + 1, 0);
-            wclrtoeol(stdscr);
-            move(actualLine, actualColumn);
-            wclrtoeol(stdscr);
-        }
+        index = FileGetRoute(actualLine, route);
         
         if(route[index - 1] != '/')
         {
@@ -1120,6 +1188,35 @@ void SaveGame()
     }
 }
 
+int FileGetRoute(int actualLine, char *route)
+{
+    int index = 0;
+
+    while (true)
+    {
+        mvaddstr(actualLine, COLUMNS/2 - 20, "Type the route for the file (max 50 char): ");
+        int actualColumn = COLUMNS/2 - 20 + 42;
+
+        refresh();
+        index = TypeOnScreen(actualLine, actualColumn, route, 50);  
+        route[index] = '\0';
+
+        if(access(route, F_OK) != -1)
+            break;
+        
+        mvaddstr(actualLine + 1,COLUMNS/2 - 5, "Wrong route");
+        refresh();
+
+        sleep(1);
+
+        move(actualLine + 1, 0);
+        wclrtoeol(stdscr);
+        move(actualLine, actualColumn);
+        wclrtoeol(stdscr);
+    }
+
+    return index;
+}
 
 int TypeOnScreen(int actualLine, int actualColumn, char *type, int typeLength)
 {
@@ -1128,7 +1225,7 @@ int TypeOnScreen(int actualLine, int actualColumn, char *type, int typeLength)
     while(true)
     {           
         input = getch();
-
+        
         if(input == 10)
         {
             if(index == 0)
@@ -1146,7 +1243,7 @@ int TypeOnScreen(int actualLine, int actualColumn, char *type, int typeLength)
             addch(' ');
             move(actualLine, actualColumn + index);
         }
-        else if(index >= 15)
+        else if(index >= typeLength)
         {
             //addch(' ');
             move(actualLine, actualColumn + typeLength);
@@ -1174,8 +1271,12 @@ void* playBackgroundSound(void* arg) {
         }
         chanel = Mix_PlayChannel(-1, sound, 0);
         
-        while(!gameClose)
+        int duration = 0;
+        while(!gameClose && duration < 90000)
+        {
+            duration+=100;
             SDL_Delay(100);
+        }
         
         Mix_HaltChannel(chanel);
         Mix_FreeChunk(sound);

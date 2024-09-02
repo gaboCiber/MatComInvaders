@@ -6,7 +6,7 @@ CFLAGS = $(shell pkg-config --cflags sdl2 SDL2_mixer)
 LDFLAGS = -lncurses $(shell pkg-config --libs sdl2 SDL2_mixer)
 
 # Nombre del ejecutable
-TARGET = matcomInvasion
+TARGET = MatComInvasion
 
 # Archivo fuente
 SRC = matcomInvasion.c

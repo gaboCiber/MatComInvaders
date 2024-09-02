@@ -4,6 +4,8 @@
         "pthread.h": "c",
         "invaderstruct.h": "c",
         "ncurses.h": "c",
-        "sdl.h": "c"
+        "sdl.h": "c",
+        "sdl_mixer.h": "c",
+        "stdbool.h": "c"
     }
 }

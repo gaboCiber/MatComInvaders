@@ -1,8 +1,8 @@
 #include <SDL2/SDL.h>
 #include <SDL2/SDL_mixer.h>
 #include <pthread.h>
-#include "../src/backgroundSound.h"
-#include "../src/bulletSound.h"
+#include "../audio/backgroundSound.h"
+#include "../audio/laser.h"
 
 
 void* playSound(void* arg) {
@@ -31,7 +31,7 @@ int main(int argc, char* argv[]) {
     }
 
     pthread_t thread1, thread2;
-    pthread_create(&thread1, NULL, playSound, backsound_cut_mp3);  // Pasa el array de bytes
+    pthread_create(&thread1, NULL, playSound, backsound_cut_mp3); 
     pthread_join(thread1, NULL);
 
     Mix_CloseAudio();
