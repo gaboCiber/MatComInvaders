@@ -59,6 +59,7 @@ void EnemyListEraseAllBlocksFromMemory();
 // Hangar 
 struct HangarNode hangarRoot;
 int totalEnemiesOnThisLevel;
+int remainingEnemiesOnThisLevel;
 int enemiesInConstruction = 0;
 int leafPriority = 0;
 const int PRIORITY = 2;
@@ -149,24 +150,35 @@ int getRamdomNumberInterval(int min, int max)
 
 void screenRefresh()
 {
-    char hp[12], thp[12], level[12], totalEnemy[12];
+    char hp[12], thp[12], level[12], totalEnemy[12], remainEnemy[12];
     sprintf(hp, "%d", player.hp);
     sprintf(thp, "%d", player.totalHp);
     sprintf(level, "%d", playerLevel);
+    sprintf(remainEnemy, "%d", remainingEnemiesOnThisLevel);
     sprintf(totalEnemy, "%d", totalEnemiesOnThisLevel);
 
+    char levelStr[15] = "Level:";
+    strcat(levelStr, level);
 
+    char playerStr[30] = "Player HP: ";
+    strcat(playerStr, hp);
+    strcat(playerStr, " / ");
+    strcat(playerStr, thp);
+    strcat(playerStr, " ");
+
+    char enemyStr[30] = "Enemies: ";
+    strcat(enemyStr, remainEnemy);
+    strcat(enemyStr, " / ");
+    strcat(enemyStr, totalEnemy);
+    strcat(enemyStr, " ");
+    
     drawMotherShip();
-    mvaddstr(0, 3, "Level:");
-    mvaddstr(0, 10, level);
-    mvaddstr(0, COLUMNS/2 - 11, "Player HP: ");
-    mvaddstr(0, COLUMNS/2, "        ");
-    mvaddstr(0, COLUMNS/2, hp);
-    mvaddstr(0, COLUMNS/2 + 2, "/");
-    mvaddstr(0, COLUMNS/2 + 3,thp);
-    mvaddstr(0, COLUMNS -15, "Enemies: ");
-    mvaddstr(0, COLUMNS - 5, totalEnemy);
-    refresh();
+    mvaddstr(0, 5, levelStr);
+    mvaddstr(0, COLUMNS/2 - 11, playerStr);
+    mvaddstr(0, COLUMNS - 20, enemyStr);
+    
+    //refresh();
+    wrefresh(stdscr);
 }
 
 void gameStart()
@@ -192,7 +204,11 @@ void gameStart()
             return;
         }
         
-        // Set Memory for Enemies
+
+        // Set MotherSip
+        drawMotherShip();
+        totalEnemiesOnThisLevel = (10 * playerLevel);
+
         if(!saveGame)
         {
             rootBlock.index = -2;
@@ -204,13 +220,11 @@ void gameStart()
 
             rootBlock.next = initial;
             numberOfFreeBlock = 1;
+            
+            remainingEnemiesOnThisLevel = totalEnemiesOnThisLevel;
         }
         
         saveGame = false;
-
-        // Set MotherSip
-        drawMotherShip();
-        totalEnemiesOnThisLevel = (10 * playerLevel);
         pthread_t mothershipThread;
         int ship = pthread_create(&mothershipThread, NULL, createMotherShipThread, NULL);
         if(ship != 0)
@@ -231,6 +245,7 @@ void gameStart()
         pthread_join(mothershipThread, NULL); 
         pthread_join(soundThread, NULL); 
         EnemyListEraseAllBlocksFromMemory();
+
     } while (levelUp);
     
 
@@ -359,7 +374,7 @@ void *createPlayerThread(void *arg)
 {    
     clock_t bulletFire = clock();
     clock_t bulletRecall;
-    double elapsedTime;
+    long elapsedTime;
 
     mvaddch(player.line, player.col,player.ch);
 
@@ -380,10 +395,11 @@ void *createPlayerThread(void *arg)
             mvaddch(player.line, player.col,player.ch);
         }
         else if(inputKeyBoard == KEY_UP)
-        {
+        { 
             bulletRecall = clock();
-            elapsedTime = ( (double) bulletRecall - bulletFire );
-            if( elapsedTime >= 5000)
+            elapsedTime =  bulletRecall - bulletFire;
+
+            if( elapsedTime >= 20500)
             {
                 bulletFire = clock();
                 pthread_t bulletThread, bulletSound;
@@ -416,10 +432,11 @@ void *createPlayerThread(void *arg)
             getch();
             
             clear();
-            drawMotherShip();
+            //drawMotherShip();
             screenOnPause = false;
-            refresh();
-            
+            //refresh();
+            screenRefresh();
+
             pthread_mutex_unlock(&mutex);
         }
         else if(inputKeyBoard == 'q')
@@ -451,6 +468,7 @@ void *createBullet(void *arg)
         int killEnemy = EnemyListCheckPositions(bullet.line, bullet.col);
         if(killEnemy >= 0)
         {
+            remainingEnemiesOnThisLevel--;
             mvaddch(bullet.line, bullet.col,' ');
             EnemyListRemove(killEnemy);
             break;
@@ -497,7 +515,7 @@ void *createMotherShipThread(void *arg)
     int totalNumberOfEnemiesInHangar = 0;
     while (!gameClose)
     {
-        if(numberOfEnemiesOnBattle == 0 && totalNumberOfEnemiesInHangar == totalEnemiesOnThisLevel)
+        if(remainingEnemiesOnThisLevel == 0)
         {
             pthread_mutex_lock(&mutex);
             gameOver(1);
@@ -522,6 +540,7 @@ void *createMotherShipThread(void *arg)
             {
                 struct EnemyToBield* toBield = (struct EnemyToBield *) malloc(sizeof(struct EnemyToBield));
                 toBield->col = getRamdomNumberInterval(5, COLUMNS-5);
+                toBield->line = 3;
                 toBield->shipModel = model;
                 toBield->indexAtEnemyList = -1;
                 
@@ -611,6 +630,7 @@ void *createEnemyThread(void *arg)
         {
             pthread_mutex_lock(&mutex);           
             player.hp -= enemy->shipModel + 1;
+            remainingEnemiesOnThisLevel--;
 
             if(player.hp <= 0)
             {
@@ -928,6 +948,7 @@ bool FileSaveEnemyList(const char *fileToWrite)
         iterator = iterator->next;
     }
     
+    fprintf(file, "remainingEnemiesOnThisLevel: %d\n",remainingEnemiesOnThisLevel);
     fprintf(file, "numberOfEnemiesOnBattle: %d\n",numberOfEnemiesOnBattle);
     for (int i = 0; i < totalNumberOfEnemiesOnBattle; i++)
     {
@@ -1065,6 +1086,10 @@ bool FileLoadEnemyList(const char *fileToRead)
         else if(strcmp(propertyName, "playerHP") == 0)
         {
             playerHPSave = num;
+        }
+        else if(strcmp(propertyName, "remainingEnemiesOnThisLevel") == 0)
+        {
+            remainingEnemiesOnThisLevel = num;
         }
         else if(strcmp(propertyName, "numberOfEnemiesOnBattle") == 0)
         {
