@@ -11,6 +11,7 @@
 #include "audio/laser.h"
 
 
+
 // General
 int COLUMNS, ROWS;
 pthread_mutex_t mutex;
@@ -62,7 +63,6 @@ int totalEnemiesOnThisLevel;
 int remainingEnemiesOnThisLevel;
 int enemiesInConstruction = 0;
 int leafPriority = 0;
-const int PRIORITY = 2;
 void HangarInsert(struct HangarNode *newEnemy);
 int HangarBuild();
 void desingEnemy(struct HangarNode* en);
@@ -83,6 +83,15 @@ int chanel;
 void* playBulletSound(void * arg);
 void* playBackgroundSound(void* arg);
 
+// Settings
+int enemySpeed = 0, contructionSpeed = 0, difficulty = 0;
+int enemySpeedTime = 500000 ;
+int constructionSpeedTime = 3000000;
+int priorityBoost = 3;
+void ShowSettings();
+void ShowDifficulty(int enemySpeed, int contructionSpeed, int difficulty, int opt);
+void ChooseDifficulty(int x, int y, int difficulty, bool color);
+void ChangeSettings(int enemySpeed, int contructionSpeed, int difficulty);
 
 // ------------------------------------------------------------------------------------//
 
@@ -447,6 +456,12 @@ void *createPlayerThread(void *arg)
 
             break;
         }
+        else if(inputKeyBoard == 's')
+        {
+            pthread_mutex_lock(&mutex);
+            ShowSettings();
+            pthread_mutex_unlock(&mutex);
+        }
 
     }
 
@@ -553,7 +568,7 @@ void *createMotherShipThread(void *arg)
                 }
             }
 
-            usleep(3000000);        
+            usleep(constructionSpeedTime);        
         }
               
     }
@@ -579,7 +594,7 @@ void *createEnemyThread(void *arg)
     switch ( enemy->shipModel )
     {
         case 0:
-            enemy->ch = '&';   
+            enemy->ch = 'O';   
             enemy->leftRight =  (int[1]) {0};
             enemy->leftRightCount = 1;  
             enemy->upDown = (int[1]) {1};
@@ -656,7 +671,7 @@ void *createEnemyThread(void *arg)
         screenRefresh();
         pthread_mutex_unlock(&mutex);
         
-        usleep(500000);
+        usleep(enemySpeedTime);
     }
 
     pthread_exit(NULL);
@@ -690,7 +705,7 @@ int HangarBuild()
 {    
     if(enemiesInConstruction > 0)
     {
-        if(leafPriority == PRIORITY && enemiesInConstruction > 1)
+        if(leafPriority == priorityBoost && enemiesInConstruction > 1)
         {
             struct HangarNode *iterator = &hangarRoot;
 
@@ -963,6 +978,10 @@ bool FileSaveEnemyList(const char *fileToWrite)
         }
     }
 
+    fprintf(file, "enemySpeed: %d\n",enemySpeed);
+    fprintf(file, "contructionSpeed: %d\n",contructionSpeed);
+    fprintf(file, "difficulty: %d\n", difficulty);
+
     fclose(file);
     return true;
 
@@ -1087,6 +1106,18 @@ bool FileLoadEnemyList(const char *fileToRead)
         {
             playerHPSave = num;
         }
+        else if(strcmp(propertyName, "enemySpeed") == 0)
+        {
+            enemySpeed = num;
+        }
+        else if(strcmp(propertyName, "difficulty") == 0)
+        {
+            difficulty = num;
+        }
+        else if(strcmp(propertyName, "contructionSpeed") == 0)
+        {
+            contructionSpeed = num;
+        }
         else if(strcmp(propertyName, "remainingEnemiesOnThisLevel") == 0)
         {
             remainingEnemiesOnThisLevel = num;
@@ -1137,6 +1168,8 @@ bool FileLoadEnemyList(const char *fileToRead)
     if(realNumberOfEnemies != numberOfEnemiesOnBattle || realNumberOfBlock != numberOfFreeBlock + 1)
         return false;
 
+    ChangeSettings(enemySpeed, contructionSpeed, difficulty);
+    
     fclose(file);
     return true;
 }
@@ -1326,4 +1359,102 @@ void* playBulletSound(void * arg)
     Mix_FreeChunk(sound);
 
     pthread_exit(NULL);
+}
+
+// Settings
+
+void ChooseDifficulty(int x, int y, int difficulty, bool color)
+{
+    mvaddstr(LINES/2 + x, COLUMNS/2 + y, "           ");
+    
+    if(color)
+        attron(COLOR_PAIR(1));
+
+    switch (difficulty)
+    {
+        case 0:
+            mvaddstr(LINES/2+ x, COLUMNS/2 - 5  + y, " Low ");
+            break;
+        case 1:
+            mvaddstr(LINES/2 + x, COLUMNS/2 - 5 + y, " Medium ");
+            break;
+        case 2:
+            mvaddstr(LINES/2 + x, COLUMNS/2 -5 + y, " High ");
+            break;
+    default:
+        break;
+    }
+
+    if(color)
+        attroff(COLOR_PAIR(1));
+}
+
+void ShowDifficulty(int enemySpeed, int contructionSpeed, int difficulty, int opt)
+{
+    ChooseDifficulty(0, 17, enemySpeed, opt == 0);
+    ChooseDifficulty(1, 22,contructionSpeed, opt == 1);
+    ChooseDifficulty(2, 12, difficulty, opt == 2);
+    //refresh();
+}
+
+void ShowSettings()
+{
+    wclear(stdscr);
+
+    mvaddstr(LINES/2 - 2, COLUMNS/2 - 15, "Settings Options (Press Enter to Save)");
+    mvaddstr(LINES/2, COLUMNS/2 - 10, "1 - Enemies's speed:");
+    mvaddstr(LINES/2 + 1, COLUMNS/2 - 10, "2 - Construction's speed:");
+    mvaddstr(LINES/2 + 2, COLUMNS/2 - 10, "3 - Difficulty:");
+    
+    int input = 0;
+    int opt = 0;
+
+    ShowDifficulty(enemySpeed, contructionSpeed, difficulty, opt);
+
+    while( (input = getch()) != 10)
+    {
+        char css[12];
+        sprintf( css, "%d" , input);
+        mvaddstr( 0,0,css);
+
+        if(input == 259) // Up
+            opt += (opt >= 0) ? -1 : 0;
+        else if(input == 258) // Down
+            opt += (opt < 3) ? 1: 0;
+        else if(input == 260 || input == 261) //Left and Right
+        {
+            int mov = (input == 260) ? -1 : 1; //Left
+
+            switch (opt)
+            {
+                case 0:
+                    enemySpeed += ( (enemySpeed == 0 && mov == -1 )|| (enemySpeed == 2 && mov == 1)) ? 0 : mov;
+                    break;
+                case 1:
+                    contructionSpeed += ( (contructionSpeed == 0 && mov == -1 )|| (contructionSpeed == 2 && mov == 1)) ? 0 : mov;
+                    break;
+                case 2:
+                    difficulty += ( (difficulty == 0 && mov == -1 )|| (difficulty == 2 && mov == 1)) ? 0 : mov;
+                    break;
+            }
+
+        }
+
+        wclear(stdscr);
+        mvaddstr(LINES/2 - 2, COLUMNS/2 - 15, "Settings Options (Press Enter to Save)");
+        mvaddstr(LINES/2, COLUMNS/2 - 10, "1 - Enemies's speed:");
+        mvaddstr(LINES/2 + 1, COLUMNS/2 - 10, "2 - Construction's speed:");
+        mvaddstr(LINES/2 + 2, COLUMNS/2 - 10, "3 - Difficulty:");
+        ShowDifficulty(enemySpeed, contructionSpeed, difficulty, opt);
+    } 
+
+    ChangeSettings(enemySpeed, contructionSpeed, difficulty);
+    clear();
+}
+
+void ChangeSettings(int enemySpeed, int contructionSpeed, int difficulty)
+{
+    enemySpeedTime = 500000 - (enemySpeed * 80000);
+    constructionSpeedTime = 3000000 - (contructionSpeed * 1000000);
+    priorityBoost = 3 - difficulty; 
 }
